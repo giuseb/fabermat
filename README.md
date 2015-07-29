@@ -1,2 +1,2 @@
 # fabermat
-our own Matlab code 
+our own Matlab scripts
