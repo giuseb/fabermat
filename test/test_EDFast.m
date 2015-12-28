@@ -24,3 +24,11 @@ for sig = 1:5
 end
 isequal(BELC_test, t)
 
+%% testing a very large (21GB) file containing 7+ days of recordings over 32 channels
+e = EDFast('/Users/giuseppe/data/edf/ALL_AJ&C57_group2_baseline7days_228h_20082015.edf') %#ok<NOPTS>
+e.Verbose = true;
+e.RecordsPerBlock = 10000;
+tic
+x=e.get_signal(3);
+toc
+

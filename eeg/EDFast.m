@@ -161,6 +161,16 @@ classdef EDFast < handle
             rv = -rv;
          end
       end
+      
+      function save_signal(obj, filename, signal)
+         a = obj.get_signal(signal); %#ok<NASGU>
+         save(filename, 'a', '-v7.3')
+      end
+      
+      function append_signal(obj, filename, signal)
+         a = obj.get_signal(signal); %#ok<NASGU>
+         save(filename, 'a', '-v7.3', '-append')
+      end
    end
    %---------------------------------------------------- Private functions
    methods (Access=private)
