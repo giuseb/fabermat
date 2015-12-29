@@ -13,9 +13,21 @@ classdef EDFast < handle
    % recordings, and number of channels. You need to experiment.
    % >> edf.RecordsPerBlock = 1000
    %
-   % Retrieve the specified signal (default is 1, if parameter is omitted)
+   % Retrieve the specified signal:
    % >> sig = edf.get_signal(2);
    %
+   % If you don't need to use the signal right away, you can instead
+   % directly save to a MAT file:
+   % >> mat_file_name = 'exp01.mat';
+   % >> signal_label = 'eeg2';
+   % >> edf.save_signal(mat_file_name, signal_label, 2)
+   %
+   % To save multiple signals to the same MAT file, loop over the append
+   % function:
+   % >> sig_labels = {'EEG1', 'EMG1'};
+   % >> for n = 1:length(sig_labels)
+   % >>    edf.append_signal(mat_file_name, sig_labels{n}, n);
+   % >> end
    %
    % Inspired by Dennis A. Dean's blockEdfLoadClass
    % http://www.mathworks.com/matlabcentral/fileexchange/45227-blockedfloadclass
@@ -32,14 +44,34 @@ classdef EDFast < handle
    properties (Access = public)
       Verbose = false
       RecordsPerBlock = 100
-      ActiveSignal = 1
    end
    
    properties (SetAccess = private)
       Filename
+      Header = struct
+      SignalHeader = struct(...
+         'signal_labels', {}, ...
+         'tranducer_type', {}, ...
+         'physical_dimension', {}, ...
+         'physical_min', {}, ...
+         'physical_max', {}, ...
+         'digital_min', {}, ...
+         'digital_max', {}, ...
+         'prefiltering', {}, ...
+         'samples_in_record', {}, ...
+         'reserve_2', {});
    end
    
    properties (Access = private)
+      ActiveSignal
+      NumMemBlocks
+      BlockSize
+      BlockBounds
+      SSize
+      SigMask
+   end
+   
+   properties (Constant, Access = private)
       headSize = 256
       headVars = {
          'edf_ver';
@@ -75,22 +107,6 @@ classdef EDFast < handle
          @str2num; @str2num; @strtrim; @str2num; @strtrim
          }
       sigHeadVarSize = [16 80 8 8 8 8 8 80 8 32]
-      
-   end
-   
-   properties (SetAccess = private)
-      Header = struct
-      SignalHeader = struct(...
-         'signal_labels', {}, ...
-         'tranducer_type', {}, ...
-         'physical_dimension', {}, ...
-         'physical_min', {}, ...
-         'physical_max', {}, ...
-         'digital_min', {}, ...
-         'digital_max', {}, ...
-         'prefiltering', {}, ...
-         'samples_in_record', {}, ...
-         'reserve_2', {});
    end
    
    %------------------------------------------------------- Public Methods
@@ -131,8 +147,8 @@ classdef EDFast < handle
       
       % Return an entire signal as a vector
       function rv = get_signal(obj, sig)
-         % Save argument to current Signal, if passed
-         if nargin > 1, obj.ActiveSignal = sig; end
+         % set up properties
+         obj.setup_params(sig);
          % Open the input file
          [fid, msg] = fopen(obj.Filename);
          if fid < 0, error(msg); end
@@ -162,69 +178,45 @@ classdef EDFast < handle
          end
       end
       
-      function save_signal(obj, filename, signal)
-         a = obj.get_signal(signal); %#ok<NASGU>
-         save(filename, 'a', '-v7.3')
+      function save_signal(obj, filename, varname, signal) %#ok<INUSD,INUSL>
+         eval([varname '= obj.get_signal(signal);']);
+         save(filename, varname, '-v7.3')
       end
       
-      function append_signal(obj, filename, signal)
-         a = obj.get_signal(signal); %#ok<NASGU>
-         save(filename, 'a', '-v7.3', '-append')
+      function append_signal(obj, filename, varname, signal) %#ok<INUSD,INUSL>
+         eval([varname '= obj.get_signal(signal);']);
+         save(filename, varname, '-v7.3', '-append')
       end
    end
    %---------------------------------------------------- Private functions
    methods (Access=private)
-      % Length = seconds, or number of records
-      % Size   = samples
+      % Size   = in samples
       % Range  = array used as index
-      
-      % range for the current block
-      function rv = BlockRange(obj, block)
-         r = [0:obj.SRSize*obj.RecordsPerBlock:obj.SSize, obj.SSize];
-         rv = (r(block)+1 : r(block+1))';
-      end
-      
-      % the total number of samples for the active signal
-      function rv = SSize(obj)
-         rv = obj.SRSize * obj.Header.num_data_records;
-      end
-      
-      % to extract the active signal from a loaded record
-      function rv = SigMask(obj)
-         a = false(obj.DRSize, 1);
-         a(obj.DRSigRange) = true;
-         rv = repmat(a, obj.RecordsPerBlock, 1);
-      end
-      
-      % number of samples read on each iteration while loading signals
-      function rv = BlockSize(obj)
-         rv = obj.RecordsPerBlock * obj.DRSize;
-      end
-      
-      % the number of iterations to read signals from the entire data file
-      function rv = NumMemBlocks(obj)
-         rv = ceil(obj.Header.num_data_records / obj.RecordsPerBlock);
-      end
-      
-      % number of samples per record, for the active signal
-      function rv = SRSize(obj)
-         rv = obj.SignalHeader(obj.ActiveSignal).samples_in_record;
+      function setup_params(obj, signal)
+         % Save argument to current Signal
+         obj.ActiveSignal = signal;
+         % data record size broken down by signal
+         drsizes = [obj.SignalHeader.samples_in_record];
+         % to extract the active signal from a loaded record
+         cum = [0, cumsum(drsizes)];
+         a = false(sum(drsizes), 1);
+         a(cum(obj.ActiveSignal)+1 : cum(obj.ActiveSignal+1)) = true;
+         obj.SigMask = repmat(a, obj.RecordsPerBlock, 1);
+         % the number of iterations to read signals from the entire data file
+         obj.NumMemBlocks = ceil(obj.Header.num_data_records / obj.RecordsPerBlock);
+         % number of samples read on each iteration while loading signals
+         obj.BlockSize = obj.RecordsPerBlock * sum(drsizes);
+         % number of samples per record, for the active signal
+         srsize = obj.SignalHeader(obj.ActiveSignal).samples_in_record;
+         % the total number of samples for the active signal
+         obj.SSize = srsize * obj.Header.num_data_records;
+         % boundaries to get the block range
+         obj.BlockBounds = [0:srsize*obj.RecordsPerBlock:obj.SSize, obj.SSize];
       end
 
-      % within-record range for the active signal
-      function rv = DRSigRange(obj)
-         cum = [0, cumsum(obj.DRSizes)];
-         rv = cum(obj.ActiveSignal)+1 : cum(obj.ActiveSignal+1);
-      end
-      
-      % data record size broken down by signal
-      function rv = DRSizes(obj)
-         rv = [obj.SignalHeader.samples_in_record];
-      end
-      
-      % overall data record size
-      function rv = DRSize(obj)
-         rv = sum(obj.DRSizes);
+      % range for the current block
+      function rv = BlockRange(obj, block)
+         rv = (obj.BlockBounds(block)+1 : obj.BlockBounds(block+1))';
       end
    end
 end
