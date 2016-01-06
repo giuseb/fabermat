@@ -64,7 +64,7 @@ classdef EDFast < handle
    
    properties (Access = private)
       ActiveSignal
-      NumMemBlocks
+       NumMemBlocks
       BlockSize
       BlockBounds
       SSize

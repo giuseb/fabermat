@@ -3,4 +3,6 @@ clear
 load EEpower_sample
 e = EEpower(eeg)  %#ok<NOPTS>
 e.Epoch = 10;
-e.power_density_curve(100:150);
+s = e.spectra;
+p = e.power_density_curve(101:110);
+e.spectrogram
