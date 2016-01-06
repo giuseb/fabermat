@@ -1,35 +1,35 @@
-function varargout = swscorer(varargin)
-% SWSCORER MATLAB code for swscorer.fig
-%      SWSCORER, by itself, creates a new SWSCORER or raises the existing
+function varargout = sleeper(varargin)
+% SLEEPER MATLAB code for sleeper.fig
+%      SLEEPER, by itself, creates a new SLEEPER or raises the existing
 %      singleton*.
 %
-%      H = SWSCORER returns the handle to a new SWSCORER or the handle to
+%      H = SLEEPER returns the handle to a new SLEEPER or the handle to
 %      the existing singleton*.
 %
-%      SWSCORER('CALLBACK',hObject,eventData,handles,...) calls the local
-%      function named CALLBACK in SWSCORER.M with the given input arguments.
+%      SLEEPER('CALLBACK',hObject,eventData,handles,...) calls the local
+%      function named CALLBACK in SLEEPER.M with the given input arguments.
 %
-%      SWSCORER('Property','Value',...) creates a new SWSCORER or raises the
+%      SLEEPER('Property','Value',...) creates a new SLEEPER or raises the
 %      existing singleton*.  Starting from the left, property value pairs are
-%      applied to the GUI before swscorer_OpeningFcn gets called.  An
+%      applied to the GUI before sleeper_OpeningFcn gets called.  An
 %      unrecognized property name or invalid value makes property application
-%      stop.  All inputs are passed to swscorer_OpeningFcn via varargin.
+%      stop.  All inputs are passed to sleeper_OpeningFcn via varargin.
 %
 %      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
 %      instance to run (singleton)".
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Edit the above text to modify the response to help swscorer
+% Edit the above text to modify the response to help sleeper
 
-% Last Modified by GUIDE v2.5 04-Jan-2016 09:14:19
+% Last Modified by GUIDE v2.5 05-Jan-2016 18:06:14
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
                    'gui_Singleton',  gui_Singleton, ...
-                   'gui_OpeningFcn', @swscorer_OpeningFcn, ...
-                   'gui_OutputFcn',  @swscorer_OutputFcn, ...
+                   'gui_OpeningFcn', @sleeper_OpeningFcn, ...
+                   'gui_OutputFcn',  @sleeper_OutputFcn, ...
                    'gui_LayoutFcn',  [] , ...
                    'gui_Callback',   []);
 if nargin && ischar(varargin{1})
@@ -44,7 +44,7 @@ end
 % End initialization code - DO NOT EDIT
 
 % --- Outputs from this function are returned to the command line.
-function varargout = swscorer_OutputFcn(~, ~, h) 
+function varargout = sleeper_OutputFcn(~, ~, h) 
 varargout{1} = h.output;
 
 
@@ -52,72 +52,66 @@ function rv = the_hypnogram(h)
 h = guidata(h);
 rv = h.score;
 
-% --- Executes just before swscorer is made visible.
-function swscorer_OpeningFcn(hObject, ~, h, eeg, varargin)
+% --- Executes just before sleeper is made visible.
+function sleeper_OpeningFcn(hObject, ~, h, eeg, varargin)
 %-------------------------------------------------------- Parse input args
 p = inputParser;
 p.addRequired('EEG', @isnumeric)
-p.addOptional('EMG', [], @isnumeric)
-p.addParameter('Hz', 500)
-p.addParameter('Epoch', 10)
-p.addParameter('EpInSeg', 180)
-p.addParameter('Hypno', [], @isnumeric)
+p.addOptional('EMG',       [], @isnumeric)
+p.addParameter('SRate',   500, @isnumeric)
+p.addParameter('Epoch',    10, @isnumeric)
+p.addParameter('EpInSeg', 180, @isnumeric)
+p.addParameter('Hypno',    [], @isnumeric)
+p.addParameter('KLength',   1, @isnumeric)
+p.addParameter('EEGPeak',   1, @isnumeric)
+p.addParameter('EMGPeak', 0.5, @isnumeric)
+p.addParameter('MinHz',     0, @isnumeric)
+p.addParameter('MaxHz',    30, @isnumeric)
 p.parse(eeg, varargin{:})
-h.p = p.Results; % the 'p' field contains all parameters
-%-------------------------------------------------------- set up params
-update_parameters(h)
-
+%------------------------------ transfer inputParser Results to the handle
+r = p.Results;
 h.eeg = r.EEG;
+h.emg = r.EMG;
 
+h.sampling_rate = r.SRate;   % in Hz
+h.scoring_epoch = r.Epoch;   % in seconds
+h.kernel_len    = r.KLength; % in seconds
+h.epochs_in_seg = r.EpInSeg; % number of epochs in a segment
+h.hz_min        = r.MinHz;   % only plot spectra above this
+h.hz_max        = r.MaxHz;   % only plot spectra below this
+h.eeg_peak      = r.EEGPeak; % the eeg charts' initial ylim
+h.emg_peak      = r.EMGPeak; % the emg charts' initial ylim
 
-if nargin > 4
-   h.emg = varargin{2};
-end
+%------------ compute here parameters that cannot be changed while scoring
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% will make these user-defined
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-h.sampling_rate =  500; % in Hz
-h.scoring_epoch =    4; % in seconds
-h.kernel_len    =    1; % in seconds
-h.hz_min        =    0; % only plot spectra above this
-h.hz_max        =   30; % only plot spectra below this
-h.segment_len   = 1800; % spectro/hypnogram chart duration in seconds
-h.eeg_peak      =   1; % the eeg charts' initial ylim
-h.emg_peak      = 0.5; % the emg charts' initial ylim
-
-%%%%%%%%%%%%%%%%%%%%%
-% computed parameters
-%%%%%%%%%%%%%%%%%%%%%
-% size of currEpoch in samples
+% size of epoch in nof samples
 h.epoch_size = h.sampling_rate * h.scoring_epoch;
 % total signal samples after trimming excess
 h.signal_size = length(h.eeg)-rem(length(h.eeg), h.epoch_size);
 % signal duration in seconds, after rounding to whole scoring epochs
 h.signal_len = h.signal_size/h.sampling_rate;
-% number of segments in the signal
-h.num_segments = ceil(h.signal_len / h.segment_len);
-% number of epochs in the segment
-h.epochs_per_segment = h.segment_len / h.scoring_epoch;
 % number of epochs in the signal
 h.tot_epochs = h.signal_len / h.scoring_epoch;
-% the width (in samples) of the spectrogram/hypnogram charts
-h.segment_size = h.sampling_rate * h.segment_len;
+
+%---------------------- compute here parameters that can be modified later
+h = update_parameters(h);
+
+%-------------------------------------------------------- set up hypnogram
+if isempty(r.Hypno)
+   h.score = nan(h.tot_epochs, 1);
+else
+   h.score = r.Hypno;
+end
+
+%----------------------------------------------------- set up GUI controls
+set(h.lblInfo, 'string', sprintf('%d Hz, %d-s epoch', h.sampling_rate, h.scoring_epoch))
 % set up signal time slider; the 12-segment increment is based on the
-% assumption that the segment will usually last one segment
+% assumption that the segment will often last one hour
 set(h.segment, ...
    'Min', 1, ...
    'Max', h.num_segments, ...
    'Value', 1, ...
    'SliderStep', [1/(h.num_segments-1), 12/(h.num_segments-1)]);
-
-
-%------------------------------------------------ Setting up the hypnogram
-if nargin > 5
-   h.score = varargin{3};
-else
-   h.score = nan(h.tot_epochs, 1);
-end
 
 %---------------------------------------------- Setting up the spectrogram
 h.pow = EEpower(h.eeg);
@@ -130,12 +124,19 @@ h.pow.setHzMax(h.hz_max);
 draw_spectra(h, 1)
 draw_epoch(h)
 
-% Choose default command line output for swscorer
+% Choose default command line output for sleeper
 h.output = hObject;
 % Update handles structure
 guidata(hObject, h);
 
-function update_parameters(h)
+%---------------------------------------------------------- Update params
+function h = update_parameters(h)
+% spectro/hypnogram chart duration in seconds
+h.segment_len   = h.scoring_epoch * h.epochs_in_seg;
+% number of segments in the signal
+h.num_segments = ceil(h.signal_len / h.segment_len);
+% the width (in samples) of the spectrogram/hypnogram charts
+h.segment_size = h.sampling_rate * h.segment_len;
 
 %---------------------------------------------------------- Custom methods
 function set_current_segment(h, seg)
@@ -147,7 +148,7 @@ set(h.currEpoch, 'string', 1)
 draw_epoch(h)
 
 function next_epoch(h)
-set(h.currEpoch, 'string', min(uivalue(h.currEpoch)+1, h.epochs_per_segment))
+set(h.currEpoch, 'string', min(uivalue(h.currEpoch)+1, h.epochs_in_seg))
 draw_epoch(h)
 
 function prev_epoch(h)
@@ -155,7 +156,7 @@ set(h.currEpoch, 'string', max(uivalue(h.currEpoch)-1, 1))
 draw_epoch(h)
 
 function set_state(h, state)
-e = h.epochs_per_segment * (uivalue(h.currSeg) - 1) + uivalue(h.currEpoch);
+e = h.epochs_in_seg * (uivalue(h.currSeg) - 1) + uivalue(h.currEpoch);
 h.score(e) = state;
 guidata(h.window, h)
 next_epoch(h)
@@ -164,10 +165,9 @@ next_epoch(h)
 function draw_spectra(h, s)
 axes(h.spectra);
 h.spectra.XTick = '';
-first = (s-1) * h.epochs_per_segment+1;
-last  = s * h.epochs_per_segment;
+first = (s-1) * h.epochs_in_seg+1;
+last  = s * h.epochs_in_seg;
 h.pow.spectrogram(first:last);
-
 
 %----------------------------------------------------- Redraw epoch charts
 function draw_epoch(h)
@@ -186,23 +186,21 @@ last  = first + h.epoch_size - 1;
 plot(h.eeg(first:last))
 h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
 h.eegPlot.XTickLabel = '';
-% h.eegPlot.YLim = h.eeg_peak;
-
 
 function draw_hypno(h, seg, epo)
 axes(h.hypno)
-x = 0:h.epochs_per_segment-1;
+x = 0:h.epochs_in_seg-1;
 l = fill([epo-1 epo epo epo-1], [0 0 6 6], 'y');
 set(l, 'linestyle', 'none')
 hold on
-y = h.score(h.epochs_per_segment * (seg - 1) +1:h.epochs_per_segment*seg);
+y = h.score(h.epochs_in_seg * (seg - 1) +1:h.epochs_in_seg*seg);
 s = stairs(x, y);
 set(gca, ...
    'tickdir', 'out', ...
    'ylim', [0 6], ...
    'ydir', 'reverse', ...
    'ytick', 1:5, ...
-   'xlim', [0 h.epochs_per_segment], ...
+   'xlim', [0 h.epochs_in_seg], ...
    'yticklabel', {'AW' 'QW' 'SS' 'RS' 'Th'}, ...
    'layer', 'top', ...
    'ButtonDownFcn', @hypno_ButtonDownFcn);
@@ -211,7 +209,7 @@ hold off
 
 function draw_power(h, seg, epo)
 axes(h.power)
-e = (seg-1)*h.epochs_per_segment + epo;
+e = (seg-1)*h.epochs_in_seg + epo;
 h.pow.power_density_curve(e);
 h.power.YLim = [10e-8 10e-4];
 
@@ -234,7 +232,7 @@ switch key.Key
       set_state(h, 4)
    case '5'
       set_state(h, 5)
-   case '0'
+   case 'n'
       set_state(h, nan)
 end
 
@@ -245,26 +243,12 @@ end
 function currEpoch_Callback(hObject, ~, h)
 t = uivalue(hObject);
 if t<1, t=1; end
-if t>h.epochs_per_segment, t=h.epochs_per_segment; end
+if t>h.epochs_in_seg, t=h.epochs_in_seg; end
 set(hObject, 'String', t)
 draw_epoch(h)
 
-
-% --- Executes on mouse press over axes background.
-function spectra_ButtonDownFcn(hObject, eventdata, handles)
-% hObject    handle to spectra (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-disp('hello')
-
-
-function srate_Callback(hObject, ~, h)
-% Hints: get(hObject,'String') returns contents of srate as text
-%        str2double(get(hObject,'String')) returns contents of srate as a double
-
-
 % --- Executes on slider movement.
-function segment_Callback(hObject, ~, h)
+function segment_Callback(hObject, ~, h) %#ok<DEFNU>
 % when user clicks on the segment slider, round to the closest segment, then
 % update the currSeg textbox, the spectrogram and the hypnogram
 v = round(get(hObject, 'Value'));
@@ -272,34 +256,28 @@ set(hObject, 'Value', v)
 set(h.currSeg, 'String', v)
 set_current_segment(h, v)
 
-function currSeg_Callback(hObject, ~, h)
+function currSeg_Callback(hObject, ~, h) %#ok<DEFNU>
 t = uivalue(hObject);
 if t<1, t=1; end
 if t>h.num_segments, t=h.num_segments; end
 set(hObject, 'string', t)
 set_current_segment(h, t)
 
-
-% --- Executes on button press in moreEEGpeak.
-function moreEEGpeak_Callback(~, ~, h)
+% --- Executes on signal size button presses.
+function moreEEGpeak_Callback(~, ~, h) %#ok<DEFNU>
 set_ylim(h, .9, 1)
-function lessEEGpeak_Callback(~, ~, h)
+function lessEEGpeak_Callback(~, ~, h) %#ok<DEFNU>
 set_ylim(h, 1.1, 1)
-function moreEMGpeak_Callback(~, ~, h)
+function moreEMGpeak_Callback(~, ~, h) %#ok<DEFNU>
 set_ylim(h, 1, .9)
-function lessEMGpeak_Callback(~, ~, h)
+function lessEMGpeak_Callback(~, ~, h) %#ok<DEFNU>
 set_ylim(h, 1, 1.1)
-
-% hObject    handle to moreEEGpeak (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
 function set_ylim(h, deeg, demg)
 p = h.eeg_peak * deeg;
 h.eegPlot.YLim = [-p p];
 h.eeg_peak = p;
 guidata(h.window, h);
-
 
 % --- Executes on mouse press over axes background.
 % I do not know why the handles are not passed here!
@@ -309,6 +287,39 @@ cp = eventdata.IntersectionPoint(1);
 set(h.currEpoch, 'string', ceil(cp(1)));
 draw_epoch(h)
 
-% hObject    handle to hypno (see GCBO)
+function txtHypnoFName_Callback(hObject, eventdata, handles)
+% hObject    handle to txtHypnoFName (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of txtHypnoFName as text
+%        str2double(get(hObject,'String')) returns contents of txtHypnoFName as a double
+
+
+
+% --- Executes on button press in btnSave.
+function btnSave_Callback(hObject, ~, h) %#ok<DEFNU>
+% hObject    handle to btnSave (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+t = h.txtHypnoFName.String;
+h.txtHypnoFName.String = 'Saving...';
+hypnogram = h.score; %#ok<NASGU>
+save(t, 'hypnogram')
+h.txtHypnoFName.String = 'Saved.';
+hObject.BackgroundColor = 'green';
+uiwait(h.window, 1);
+hObject.BackgroundColor = 'white';
+h.txtHypnoFName.String = t;
+
+
+
+function txtEpInSeg_Callback(hObject, ~, h)
+eis = uivalue(hObject);
+% hObject    handle to txtEpInSeg (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of txtEpInSeg as text
+%        str2double(get(hObject,'String')) returns contents of txtEpInSeg as a double
+
