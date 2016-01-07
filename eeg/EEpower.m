@@ -18,6 +18,14 @@ classdef EEpower < handle
       NumEpochs
       % the EEG signal
       EEG
+      % maximum power
+      MaxPwr
+      % minimum power
+      MinPwr
+      % maximum log power
+      MaxLogPwr
+      % minimum log power
+      MinLogPwr
    end
    
    properties (Access = private)
@@ -48,6 +56,8 @@ classdef EEpower < handle
       function rv = log_spectra(obj, epochs)
          if nargin < 2, epochs = 1:obj.NumEpochs; end
          rv = 10*log10(obj.spectra(epochs));
+         obj.MinLogPwr = min(rv(:));
+         obj.MaxLogPwr = max(rv(:));
       end
       %------------------------------------------------ Plot power density
       function rv = power_density_curve(obj, epochs)
@@ -110,6 +120,8 @@ classdef EEpower < handle
             % compute the spectra
             obj.pxx(:,ep) = pwelch(data, ha, 0, obj.spk, obj.Hz);
          end
+         obj.MaxPwr = max(obj.pxx(:));
+         obj.MinPwr = min(obj.pxx(:));
       end
             
       function update_parameters(obj)
