@@ -1,50 +1,31 @@
 function varargout = sleeper(varargin)
-% SLEEPER MATLAB code for sleeper.fig
-%      SLEEPER, by itself, creates a new SLEEPER or raises the existing
-%      singleton*.
-%
-%      H = SLEEPER returns the handle to a new SLEEPER or the handle to
-%      the existing singleton*.
-%
-%      SLEEPER('CALLBACK',hObject,eventData,handles,...) calls the local
-%      function named CALLBACK in SLEEPER.M with the given input arguments.
-%
-%      SLEEPER('Property','Value',...) creates a new SLEEPER or raises the
-%      existing singleton*.  Starting from the left, property value pairs are
-%      applied to the GUI before sleeper_OpeningFcn gets called.  An
-%      unrecognized property name or invalid value makes property application
-%      stop.  All inputs are passed to sleeper_OpeningFcn via varargin.
-%
-%      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
-%      instance to run (singleton)".
-%
-% See also: GUIDE, GUIDATA, GUIHANDLES
+% SLEEPER - sleep scoring system
+%      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
+%      in EEG.
 
-% Edit the above text to modify the response to help sleeper
-
-% Last Modified by GUIDE v2.5 05-Jan-2016 18:06:14
+% Last Modified by GUIDE v2.5 06-Jan-2016 09:54:38
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
-                   'gui_Singleton',  gui_Singleton, ...
-                   'gui_OpeningFcn', @sleeper_OpeningFcn, ...
-                   'gui_OutputFcn',  @sleeper_OutputFcn, ...
-                   'gui_LayoutFcn',  [] , ...
-                   'gui_Callback',   []);
+   'gui_Singleton',  gui_Singleton, ...
+   'gui_OpeningFcn', @sleeper_OpeningFcn, ...
+   'gui_OutputFcn',  @sleeper_OutputFcn, ...
+   'gui_LayoutFcn',  [] , ...
+   'gui_Callback',   []);
 if nargin && ischar(varargin{1})
-    gui_State.gui_Callback = str2func(varargin{1});
+   gui_State.gui_Callback = str2func(varargin{1});
 end
 
 if nargout
-    [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
+   [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
 else
-    gui_mainfcn(gui_State, varargin{:});
+   gui_mainfcn(gui_State, varargin{:});
 end
 % End initialization code - DO NOT EDIT
 
 % --- Outputs from this function are returned to the command line.
-function varargout = sleeper_OutputFcn(~, ~, h) 
+function varargout = sleeper_OutputFcn(~, ~, h)
 varargout{1} = h.output;
 
 
@@ -104,6 +85,7 @@ else
 end
 
 %----------------------------------------------------- set up GUI controls
+h.txtEpInSeg.String = h.epochs_in_seg;
 set(h.lblInfo, 'string', sprintf('%d Hz, %d-s epoch', h.sampling_rate, h.scoring_epoch))
 % set up signal time slider; the 12-segment increment is based on the
 % assumption that the segment will often last one hour
@@ -121,7 +103,11 @@ h.pow.setKsize(h.kernel_len);
 h.pow.setHzMin(h.hz_min);
 h.pow.setHzMax(h.hz_max);
 
-draw_spectra(h, 1)
+axes(h.spectra)
+h.sg = h.pow.spectrogram(1:h.epochs_in_seg);
+h.spectra.XTick = '';
+
+%------------------------------------------------ Draw first eeg and power
 draw_epoch(h)
 
 % Choose default command line output for sleeper
@@ -141,7 +127,7 @@ h.segment_size = h.sampling_rate * h.segment_len;
 %---------------------------------------------------------- Custom methods
 function set_current_segment(h, seg)
 % set(h.window, 'pointer', 'watch')
-drawnow
+% drawnow
 draw_spectra(h, seg)
 % set(h.window, 'pointer', 'arrow')
 set(h.currEpoch, 'string', 1)
@@ -162,21 +148,25 @@ guidata(h.window, h)
 next_epoch(h)
 
 %----------------------------------------------------- Redraw spectra
-function draw_spectra(h, s)
-axes(h.spectra);
+function draw_spectra(h, seg)
+% axes(h.spectra);
+% t = h.pow.spectra(seg_range(h, seg));
+% h.sg.CData = t;
+axes(h.spectra)
+h.pow.spectrogram(seg_range(h, seg));
+h.spectra.XLim = [0.5 h.epochs_in_seg+0.5];
 h.spectra.XTick = '';
-first = (s-1) * h.epochs_in_seg+1;
-last  = s * h.epochs_in_seg;
-h.pow.spectrogram(first:last);
 
 %----------------------------------------------------- Redraw epoch charts
 function draw_epoch(h)
 seg = uivalue(h.currSeg);
 epo = uivalue(h.currEpoch);
 
-draw_eeg(h, seg, epo)
-draw_hypno(h, seg, epo)
-draw_power(h, seg, epo)
+if h.tot_epochs >= ep1(h, seg) + epo
+   draw_eeg(h, seg, epo)
+   draw_hypno(h, seg, epo)
+   draw_power(h, seg, epo)
+end
 
 function draw_eeg(h, seg, epo)
 axes(h.eegPlot)
@@ -189,11 +179,11 @@ h.eegPlot.XTickLabel = '';
 
 function draw_hypno(h, seg, epo)
 axes(h.hypno)
-x = 0:h.epochs_in_seg-1;
 l = fill([epo-1 epo epo epo-1], [0 0 6 6], 'y');
 set(l, 'linestyle', 'none')
 hold on
-y = h.score(h.epochs_in_seg * (seg - 1) +1:h.epochs_in_seg*seg);
+y = h.score(seg_range(h, seg));
+x = 0:length(y)-1;
 s = stairs(x, y);
 set(gca, ...
    'tickdir', 'out', ...
@@ -204,18 +194,24 @@ set(gca, ...
    'yticklabel', {'AW' 'QW' 'SS' 'RS' 'Th'}, ...
    'layer', 'top', ...
    'ButtonDownFcn', @hypno_ButtonDownFcn);
-% set(s, 'ButtonDownFcn', @hypno_ButtonDownFcn);
 hold off
 
 function draw_power(h, seg, epo)
 axes(h.power)
-e = (seg-1)*h.epochs_in_seg + epo;
+e = ep1(h, seg) + epo -1;
 h.pow.power_density_curve(e);
-h.power.YLim = [10e-8 10e-4];
 
+function rv = seg_range(h, seg)
+rv = ep1(h, seg):epN(h, seg);
+
+function rv = ep1(h, seg)
+rv = (seg-1) * h.epochs_in_seg + 1;
+
+function rv = epN(h, seg)
+rv = min(seg * h.epochs_in_seg, h.tot_epochs);
 
 % --- Executes on key press with focus on window and none of its controls.
-function window_KeyPressFcn(~, key, h)
+function window_KeyPressFcn(~, key, h) %#ok<DEFNU>
 
 switch key.Key
    case 'rightarrow'
@@ -240,7 +236,7 @@ end
 %=============================================================== CALLBACKS
 
 
-function currEpoch_Callback(hObject, ~, h)
+function currEpoch_Callback(hObject, ~, h) %#ok<DEFNU>
 t = uivalue(hObject);
 if t<1, t=1; end
 if t>h.epochs_in_seg, t=h.epochs_in_seg; end
@@ -287,16 +283,6 @@ cp = eventdata.IntersectionPoint(1);
 set(h.currEpoch, 'string', ceil(cp(1)));
 draw_epoch(h)
 
-function txtHypnoFName_Callback(hObject, eventdata, handles)
-% hObject    handle to txtHypnoFName (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of txtHypnoFName as text
-%        str2double(get(hObject,'String')) returns contents of txtHypnoFName as a double
-
-
-
 % --- Executes on button press in btnSave.
 function btnSave_Callback(hObject, ~, h) %#ok<DEFNU>
 % hObject    handle to btnSave (see GCBO)
@@ -313,13 +299,8 @@ hObject.BackgroundColor = 'white';
 h.txtHypnoFName.String = t;
 
 
-
-function txtEpInSeg_Callback(hObject, ~, h)
-eis = uivalue(hObject);
-% hObject    handle to txtEpInSeg (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of txtEpInSeg as text
-%        str2double(get(hObject,'String')) returns contents of txtEpInSeg as a double
-
+function txtEpInSeg_Callback(hObject, ~, h) %#ok<DEFNU>
+h.epochs_in_seg = uivalue(hObject);
+h = update_parameters(h);
+guidata(hObject, h)
+set_current_segment(h, 1)
