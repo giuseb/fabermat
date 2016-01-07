@@ -3,7 +3,7 @@ function varargout = sleeper(varargin)
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG.
 
-% Last Modified by GUIDE v2.5 06-Jan-2016 09:54:38
+% Last Modified by GUIDE v2.5 07-Jan-2016 09:26:51
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -86,6 +86,8 @@ end
 
 %----------------------------------------------------- set up GUI controls
 h.txtEpInSeg.String = h.epochs_in_seg;
+h.currSeg.String = 1;
+h.currEpoch.String = 1;
 set(h.lblInfo, 'string', sprintf('%d Hz, %d-s epoch', h.sampling_rate, h.scoring_epoch))
 % set up signal time slider; the 12-segment increment is based on the
 % assumption that the segment will often last one hour
@@ -285,9 +287,6 @@ draw_epoch(h)
 
 % --- Executes on button press in btnSave.
 function btnSave_Callback(hObject, ~, h) %#ok<DEFNU>
-% hObject    handle to btnSave (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 t = h.txtHypnoFName.String;
 h.txtHypnoFName.String = 'Saving...';
 hypnogram = h.score; %#ok<NASGU>
@@ -304,3 +303,12 @@ h.epochs_in_seg = uivalue(hObject);
 h = update_parameters(h);
 guidata(hObject, h)
 set_current_segment(h, 1)
+
+function txtHypnoFName_Callback(hObject, ~, h) %#ok<DEFNU>
+m = regexp(hObject.String, '\W', 'once');
+if isempty(m)
+   h.btnSave.Enable = 'on';
+else
+   hObject.String = 'Invalid file name!';
+   h.btnSave.Enable = 'off';
+end
