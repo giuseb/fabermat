@@ -120,8 +120,9 @@ classdef EEpower < handle
             % compute the spectra
             obj.pxx(:,ep) = pwelch(data, ha, 0, obj.spk, obj.Hz);
          end
-         obj.MaxPwr = max(obj.pxx(:));
-         obj.MinPwr = min(obj.pxx(:));
+         t = obj.pxx(obj.hz_rng, :);
+         obj.MaxPwr = max(t(:));
+         obj.MinPwr = min(t(:));
       end
             
       function update_parameters(obj)
@@ -138,7 +139,7 @@ classdef EEpower < handle
          obj.freqs     = 0:(1/obj.Ksize):obj.Hz/2;
          % frequency range for plotting purposes; very high frequencies
          % are often useless
-         obj.hz_rng = find(obj.freqs >= obj.HzMin & obj.freqs <= obj.HzMax);
+         obj.hz_rng = find(obj.freqs >= obj.HzMin & obj.freqs < obj.HzMax);
       end
    end
 end
