@@ -43,7 +43,7 @@ p.addParameter('EEGPeak',   1, @isnumeric)
 p.addParameter('EMGPeak', 0.5, @isnumeric)
 p.addParameter('MinHz',     0, @isnumeric)
 p.addParameter('MaxHz',    30, @isnumeric)
-p.addParameter('States', {'SS', 'RS', 'Wk', 'Th'}, @iscell)
+p.addParameter('States', {'REM', 'nREM', 'Wake'}, @iscell)
 p.parse(eeg, varargin{:})
 %------------------------------ transfer inputParser Results to the handle
 r = p.Results;
@@ -154,9 +154,11 @@ function draw_spectra(h, seg)
 axes(h.spectra)
 sg = h.pow.spectrogram(seg_range(h, seg));
 sg.HitTest = 'off';
-h.spectra.XLim = [0.5 h.epochs_in_seg+0.5];
-h.spectra.XTick = [];
-h.spectra.YLim = [h.hz_min h.hz_max]+0.5;
+set(h.spectra, ...
+   'XLim', [0.5 h.epochs_in_seg+0.5], ...
+   'XTick', [], ...
+   'YLim', [h.hz_min h.hz_max]+0.5, ...
+   'TickLen', [.007 .007])
 box on
 
 %----------------------------------------------------- Redraw epoch charts
@@ -176,11 +178,16 @@ first = (seg-1) * h.segment_size + (epo-1) * h.epoch_size + 1;
 last  = first + h.epoch_size - 1;
 axes(h.eegPlot)
 plot(h.eeg(first:last))
-axes(h.emgPlot)
-plot(h.emg(first:last))
 h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
-h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
 h.eegPlot.XTickLabel = '';
+if ~isempty(h.emg)
+   axes(h.emgPlot)
+   plot(h.emg(first:last))
+   h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
+   l = str2double(h.emgPlot.XTickLabel);
+   h.emgPlot.XTickLabel = l/h.sampling_rate;
+end
+set([h.eegPlot, h.emgPlot], 'ticklength', [.007 .007])
 
 function draw_hypno(h, seg, epo)
 axes(h.hypno)
@@ -192,8 +199,9 @@ y = h.score(seg_range(h, seg));
 x = 0:length(y)-1;
 stairs(x, y);
 set(h.hypno, ...
+   'ticklen', [.007 .007], ...
    'tickdir', 'out', ...
-   'ylim', [0 ns+1], ...
+   'ylim', [.5 .5+ns], ...
    'ytick', 1:ns, ...
    'xlim', [0 h.epochs_in_seg], ...
    'yticklabel', h.states, ...
@@ -204,8 +212,10 @@ hold off
 function draw_power(h, seg, epo)
 axes(h.power)
 e = ep1(h, seg) + epo -1;
-h.pow.power_density_curve(e)
-h.power.YLim = [h.pow.MinPwr h.pow.MaxPwr];
+h.pow.power_density_curve(e);
+set(h.power, ...
+   'ylim', [h.pow.MinPwr h.pow.MaxPwr], ...
+   'ticklen', [.05 .05])
 
 function rv = seg_range(h, seg)
 rv = ep1(h, seg):epN(h, seg);
@@ -293,8 +303,7 @@ set(h.currEpoch, 'string', ceil(cp(1)));
 draw_epoch(h)
 
 % --- Executes on mouse press over axes background.
-function spectra_ButtonDownFcn(hObject, eventdata, h)
-%h = guidata(hObject);
+function spectra_ButtonDownFcn(hObject, eventdata, h) %#ok<DEFNU>
 cp = eventdata.IntersectionPoint(1)-0.5;
 set(h.currEpoch, 'string', ceil(cp(1)));
 draw_epoch(h)
@@ -320,6 +329,7 @@ guidata(hObject, h)
 set_current_segment(h, 1)
 
 function txtHypnoFName_Callback(hObject, ~, h) %#ok<DEFNU>
+% ensure that file name is only made of letters, numbers, underscores
 m = regexp(hObject.String, '\W', 'once');
 if isempty(m)
    h.btnSave.Enable = 'on';
@@ -327,10 +337,3 @@ else
    hObject.String = 'Invalid file name!';
    h.btnSave.Enable = 'off';
 end
-
-
-% --- Executes on mouse press over figure background.
-function window_ButtonDownFcn(hObject, eventdata, handles)
-% hObject    handle to window (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
