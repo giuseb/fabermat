@@ -3,7 +3,7 @@ function varargout = sleeper(varargin)
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG.
 
-% Last Modified by GUIDE v2.5 06-Jan-2016 09:54:38
+% Last Modified by GUIDE v2.5 07-Jan-2016 18:20:43
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -28,11 +28,6 @@ end
 function varargout = sleeper_OutputFcn(~, ~, h)
 varargout{1} = h.output;
 
-
-function rv = the_hypnogram(h)
-h = guidata(h);
-rv = h.score;
-
 % --- Executes just before sleeper is made visible.
 function sleeper_OpeningFcn(hObject, ~, h, eeg, varargin)
 %-------------------------------------------------------- Parse input args
@@ -48,6 +43,7 @@ p.addParameter('EEGPeak',   1, @isnumeric)
 p.addParameter('EMGPeak', 0.5, @isnumeric)
 p.addParameter('MinHz',     0, @isnumeric)
 p.addParameter('MaxHz',    30, @isnumeric)
+p.addParameter('States', {'SS', 'RS', 'Wk', 'Th'}, @iscell)
 p.parse(eeg, varargin{:})
 %------------------------------ transfer inputParser Results to the handle
 r = p.Results;
@@ -60,8 +56,10 @@ h.kernel_len    = r.KLength; % in seconds
 h.epochs_in_seg = r.EpInSeg; % number of epochs in a segment
 h.hz_min        = r.MinHz;   % only plot spectra above this
 h.hz_max        = r.MaxHz;   % only plot spectra below this
-h.eeg_peak      = r.EEGPeak; % the eeg charts' initial ylim
-h.emg_peak      = r.EMGPeak; % the emg charts' initial ylim
+h.states        = r.States;
+
+h.eeg_peak = max(h.eeg)*1.05; % the eeg charts' initial ylim
+h.emg_peak = max(h.emg)*1.05; % the emg charts' initial ylim
 
 %------------ compute here parameters that cannot be changed while scoring
 
@@ -86,6 +84,8 @@ end
 
 %----------------------------------------------------- set up GUI controls
 h.txtEpInSeg.String = h.epochs_in_seg;
+h.currSeg.String = 1;
+h.currEpoch.String = 1;
 set(h.lblInfo, 'string', sprintf('%d Hz, %d-s epoch', h.sampling_rate, h.scoring_epoch))
 % set up signal time slider; the 12-segment increment is based on the
 % assumption that the segment will often last one hour
@@ -103,12 +103,11 @@ h.pow.setKsize(h.kernel_len);
 h.pow.setHzMin(h.hz_min);
 h.pow.setHzMax(h.hz_max);
 
-axes(h.spectra)
-h.sg = h.pow.spectrogram(1:h.epochs_in_seg);
-h.spectra.XTick = '';
+% axes(h.spectra)
+% h.sg = h.pow.spectrogram(1:h.epochs_in_seg);
+% h.spectra.XTick = '';
 
-%------------------------------------------------ Draw first eeg and power
-draw_epoch(h)
+set_current_segment(h, 1)
 
 % Choose default command line output for sleeper
 h.output = hObject;
@@ -153,9 +152,12 @@ function draw_spectra(h, seg)
 % t = h.pow.spectra(seg_range(h, seg));
 % h.sg.CData = t;
 axes(h.spectra)
-h.pow.spectrogram(seg_range(h, seg));
+sg = h.pow.spectrogram(seg_range(h, seg));
+sg.HitTest = 'off';
 h.spectra.XLim = [0.5 h.epochs_in_seg+0.5];
-h.spectra.XTick = '';
+h.spectra.XTick = [];
+h.spectra.YLim = [h.hz_min h.hz_max]+0.5;
+box on
 
 %----------------------------------------------------- Redraw epoch charts
 function draw_epoch(h)
@@ -169,29 +171,32 @@ if h.tot_epochs >= ep1(h, seg) + epo
 end
 
 function draw_eeg(h, seg, epo)
-axes(h.eegPlot)
 % signal range
 first = (seg-1) * h.segment_size + (epo-1) * h.epoch_size + 1;
 last  = first + h.epoch_size - 1;
+axes(h.eegPlot)
 plot(h.eeg(first:last))
+axes(h.emgPlot)
+plot(h.emg(first:last))
 h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
+h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
 h.eegPlot.XTickLabel = '';
 
 function draw_hypno(h, seg, epo)
 axes(h.hypno)
-l = fill([epo-1 epo epo epo-1], [0 0 6 6], 'y');
+ns = length(h.states);
+l = fill([epo-1 epo epo epo-1], [0 0 ns+1 ns+1], 'm');
 set(l, 'linestyle', 'none')
 hold on
 y = h.score(seg_range(h, seg));
 x = 0:length(y)-1;
-s = stairs(x, y);
-set(gca, ...
+stairs(x, y);
+set(h.hypno, ...
    'tickdir', 'out', ...
-   'ylim', [0 6], ...
-   'ydir', 'reverse', ...
-   'ytick', 1:5, ...
+   'ylim', [0 ns+1], ...
+   'ytick', 1:ns, ...
    'xlim', [0 h.epochs_in_seg], ...
-   'yticklabel', {'AW' 'QW' 'SS' 'RS' 'Th'}, ...
+   'yticklabel', h.states, ...
    'layer', 'top', ...
    'ButtonDownFcn', @hypno_ButtonDownFcn);
 hold off
@@ -199,7 +204,8 @@ hold off
 function draw_power(h, seg, epo)
 axes(h.power)
 e = ep1(h, seg) + epo -1;
-h.pow.power_density_curve(e);
+h.pow.power_density_curve(e)
+h.power.YLim = [h.pow.MinPwr h.pow.MaxPwr];
 
 function rv = seg_range(h, seg)
 rv = ep1(h, seg):epN(h, seg);
@@ -273,6 +279,9 @@ function set_ylim(h, deeg, demg)
 p = h.eeg_peak * deeg;
 h.eegPlot.YLim = [-p p];
 h.eeg_peak = p;
+p = h.emg_peak * demg;
+h.emgPlot.YLim = [-p p];
+h.emg_peak = p;
 guidata(h.window, h);
 
 % --- Executes on mouse press over axes background.
@@ -283,11 +292,16 @@ cp = eventdata.IntersectionPoint(1);
 set(h.currEpoch, 'string', ceil(cp(1)));
 draw_epoch(h)
 
+% --- Executes on mouse press over axes background.
+function spectra_ButtonDownFcn(hObject, eventdata, h)
+%h = guidata(hObject);
+cp = eventdata.IntersectionPoint(1)-0.5;
+set(h.currEpoch, 'string', ceil(cp(1)));
+draw_epoch(h)
+
+
 % --- Executes on button press in btnSave.
 function btnSave_Callback(hObject, ~, h) %#ok<DEFNU>
-% hObject    handle to btnSave (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 t = h.txtHypnoFName.String;
 h.txtHypnoFName.String = 'Saving...';
 hypnogram = h.score; %#ok<NASGU>
@@ -304,3 +318,19 @@ h.epochs_in_seg = uivalue(hObject);
 h = update_parameters(h);
 guidata(hObject, h)
 set_current_segment(h, 1)
+
+function txtHypnoFName_Callback(hObject, ~, h) %#ok<DEFNU>
+m = regexp(hObject.String, '\W', 'once');
+if isempty(m)
+   h.btnSave.Enable = 'on';
+else
+   hObject.String = 'Invalid file name!';
+   h.btnSave.Enable = 'off';
+end
+
+
+% --- Executes on mouse press over figure background.
+function window_ButtonDownFcn(hObject, eventdata, handles)
+% hObject    handle to window (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
