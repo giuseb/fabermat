@@ -3,7 +3,7 @@ function varargout = sleeper(varargin)
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG.
 
-% Last Modified by GUIDE v2.5 07-Jan-2016 18:20:43
+% Last Modified by GUIDE v2.5 12-Jan-2016 15:08:47
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -125,10 +125,8 @@ h.segment_size = h.sampling_rate * h.segment_len;
 
 %---------------------------------------------------------- Custom methods
 function set_current_segment(h, seg)
-% set(h.window, 'pointer', 'watch')
-% drawnow
-draw_spectra(h, seg)
-% set(h.window, 'pointer', 'arrow')
+set(h.currSeg, 'String', seg)
+draw_spectra(h)
 set(h.currEpoch, 'string', 1)
 draw_epoch(h)
 
@@ -147,12 +145,11 @@ guidata(h.window, h)
 next_epoch(h)
 
 %----------------------------------------------------- Redraw spectra
-function draw_spectra(h, seg)
-% axes(h.spectra);
+function draw_spectra(h)
 % t = h.pow.spectra(seg_range(h, seg));
 % h.sg.CData = t;
 axes(h.spectra)
-sg = h.pow.spectrogram(seg_range(h, seg));
+sg = h.pow.spectrogram(seg_range(h, uivalue(h.currSeg)));
 sg.HitTest = 'off';
 set(h.spectra, ...
    'XLim', [0.5 h.epochs_in_seg+0.5], ...
@@ -265,14 +262,12 @@ function segment_Callback(hObject, ~, h) %#ok<DEFNU>
 % update the currSeg textbox, the spectrogram and the hypnogram
 v = round(get(hObject, 'Value'));
 set(hObject, 'Value', v)
-set(h.currSeg, 'String', v)
 set_current_segment(h, v)
 
 function currSeg_Callback(hObject, ~, h) %#ok<DEFNU>
 t = uivalue(hObject);
 if t<1, t=1; end
 if t>h.num_segments, t=h.num_segments; end
-set(hObject, 'string', t)
 set_current_segment(h, t)
 
 % --- Executes on signal size button presses.
@@ -336,4 +331,83 @@ if isempty(m)
 else
    hObject.String = 'Invalid file name!';
    h.btnSave.Enable = 'off';
+end
+
+% --- Executes on mouse press over axes background.
+function eegPlot_ButtonDownFcn(hObject, eventdata, h) %#ok<DEFNU>
+cp = eventdata.IntersectionPoint(2);
+set(h.txtEventThr, 'String', cp)
+
+function txtEventThr_Callback(hObject, eventdata, handles) %#ok<DEFNU>
+
+
+% --- Executes on button press in btnNext.
+function btnNext_Callback(~, ~, h) %#ok<DEFNU>
+m = find(h.eeg < uivalue(h.txtEventThr));
+mm = uivalue(h.currSeg) * uivalue(h.currEpoch) * h.epoch_size;
+m = min(m(m>mm));
+e = floor(m/h.epoch_size);
+h.currSeg.String = floor(e/uivalue(h.txtEpInSeg))+1;
+h.currEpoch.String = rem(e, uivalue(h.txtEpInSeg))+1;
+draw_spectra(h)
+draw_epoch(h)
+
+
+% --- Executes on selection change in listbox1.
+function listbox1_Callback(hObject, eventdata, handles)
+% hObject    handle to listbox1 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns listbox1 contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from listbox1
+
+
+% --- Executes during object creation, after setting all properties.
+function listbox1_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to listbox1 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: listbox controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in btnFindThr.
+function btnFindThr_Callback(hObject, ~, h) %#ok<DEFNU>
+over_thr = find(abs(h.eeg) > abs(uivalue(h.txtEventThr)));
+h.watch_epochs = unique(floor(over_thr / h.epoch_size));
+
+set(h.sldEvents, ...
+   'Min', 1, ...
+   'Max', length(h.watch_epochs), ...
+   'SliderStep', [1/(length(h.watch_epochs)-1), 10/(length(h.watch_epochs)-1)], ...
+   'Value', 1)
+guidata(hObject, h)
+sldEvents_Callback(h.sldEvents, 0, h)
+
+% --- Executes on slider movement.
+function sldEvents_Callback(hObject, ~, h) %#ok<DEFNU>
+v = round(hObject.Value);
+hObject.Value = v;
+
+epInSeg = uivalue(h.txtEpInSeg);
+h.currSeg.String = floor(h.watch_epochs(v)/epInSeg)+1;
+h.currEpoch.String = rem(h.watch_epochs(v), epInSeg)+1;
+draw_spectra(h)
+draw_epoch(h)
+
+
+% --- Executes during object creation, after setting all properties.
+function sldEvents_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to sldEvents (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: slider controls usually have a light gray background.
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
