@@ -8,8 +8,8 @@ sleeper(eeg, emg)
 
 % there's a nice one at
 epo=56;
-sec_start = 3.2;
-sec_end   = 5.3;
+sec_start = 2.6;
+sec_end   = 5.6;
 
 idx1 = 5000 * epo + sec_start * 500 + 1;
 idx2 = 5000 * epo + sec_end * 500;
@@ -19,5 +19,5 @@ subplot(1,2,1)
 plot(swd)
 subplot(1,2,2)
 e = EEpower(swd);
-e.setEpoch(2);
+e.setEpoch(3);
 e.power_density_curve(1)
