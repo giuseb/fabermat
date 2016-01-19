@@ -31,6 +31,10 @@ classdef ERPool < handle
    %     the analysis epoch (eg: -200:1/KHz:600); useful for plotting ERPs:
    %
    %     plot(ep.time_range, ep.average(CODE))
+   %
+   %ph = ep.plot(CODE)
+   %     plots average ERPs time-locked to the stimulus specified by CODE.
+   %     If CODE is omitted, all events are plotted as separate lines.
    
    properties (SetAccess = private)
       Hz
@@ -45,6 +49,8 @@ classdef ERPool < handle
       dirty
       matz
       KHz
+      bl_samples % number of samples during baseline
+      rs_samples % number of samples during response
    end
    
    methods
@@ -66,6 +72,7 @@ classdef ERPool < handle
          obj.times = event_times;
          obj.codes = event_codes;
          obj.dirty = true;
+         obj.update_params
       end
       
       function rv = average(obj, code)
@@ -75,6 +82,15 @@ classdef ERPool < handle
       function rv = trials(obj, code)
          if obj.dirty, obj.create_mat; end
          rv = obj.matz(obj.codes==code, :);
+      end
+      
+      function rv = plot(obj, codes)
+         if nargin < 2, codes=unique(obj.codes); end
+         d = zeros(length(codes), obj.bl_samples+obj.rs_samples);
+         for x = codes(:)'
+            d(x,:) = obj.average(x);
+         end
+         rv = plot(obj.time_range, d);
       end
       
       function rv = time_range(obj)
@@ -101,15 +117,21 @@ classdef ERPool < handle
    
    methods (Access=private)
       function create_mat(obj)
-         obj.KHz = obj.Hz / 1000;
-         bl = obj.baseline * obj.KHz;
-         rs = obj.response * obj.KHz;
+         obj.update_params
+         bl = obj.bl_samples;
+         rs = obj.rs_samples;
          obj.matz = zeros(length(obj.codes), bl+rs);
          for n = 1:length(obj.times)
             ce = obj.times(n);
             obj.matz(n, :) = obj.eeg(ce-bl+1:ce+rs);
          end
          obj.dirty = false;
+      end
+      
+      function update_params(obj)
+         obj.KHz = obj.Hz / 1000;
+         obj.bl_samples = obj.baseline * obj.KHz;
+         obj.rs_samples = obj.response * obj.KHz;
       end
    end
  end

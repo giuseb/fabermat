@@ -18,5 +18,4 @@ code = com(:, 5)';
 % the analysis is performed by "objects of the ERPool class"
 % in practice, do the following:
 ep = ERPool(eeg, idx, code);
-size(ep.time_range)
-plot(ep.time_range, [ep.average(1); ep.average(2)])
+ep.plot
