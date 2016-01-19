@@ -10,11 +10,13 @@ first_sample = datastart(1);
 last_sample  = dataend(1);
 eeg = data(first_sample:last_sample);
 
-% events are identified by data sample index, rather than time
-idx = com(:, 3)';
+% events are identified by data sample index, rather than time.
+% NB: the (70*4) correction fixes a problem with this dataset.
+idx = com(:, 3)' - (70*4);
 code = com(:, 5)';
 
 % the analysis is performed by "objects of the ERPool class"
 % in practice, do the following:
 ep = ERPool(eeg, idx, code);
-plot(ep.average(1))
+size(ep.time_range)
+plot(ep.time_range, [ep.average(1); ep.average(2)])
