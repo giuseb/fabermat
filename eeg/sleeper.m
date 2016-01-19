@@ -6,7 +6,7 @@ function varargout = sleeper(varargin)
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG
 
-% Last Modified by GUIDE v2.5 17-Jan-2016 10:51:04
+% Last Modified by GUIDE v2.5 19-Jan-2016 17:57:53
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -41,7 +41,7 @@ p.addParameter('SRate',   500, @isnumeric)
 p.addParameter('Epoch',    10, @isnumeric)
 p.addParameter('EpInSeg', 180, @isnumeric)
 p.addParameter('Hypno',    [], @isnumeric)
-p.addParameter('Events', struct, @isstruct)
+p.addParameter('Markers', mrkstr, @isstruct)
 p.addParameter('KLength',   1, @isnumeric)
 p.addParameter('EEGPeak',   1, @isnumeric)
 p.addParameter('EMGPeak', 0.5, @isnumeric)
@@ -53,7 +53,8 @@ p.parse(eeg, varargin{:})
 r = p.Results;
 h.eeg = r.EEG;
 h.emg = r.EMG;
-h.events = r.Events;
+h.markers = r.Markers;
+h.cm = length(h.markers); % current marker
 
 h.sampling_rate = r.SRate;   % in Hz
 h.scoring_epoch = r.Epoch;   % in seconds
@@ -70,7 +71,6 @@ h.emg_peak = max(h.emg)*1.05; % the emg charts' initial ylim
 h.setting_EEG_thr = false;
 h.setting_event = false;
 h.default_event_tag = 'Tag';
-h.ce = 0; % current event
 
 %------------ compute here parameters that cannot be changed while scoring
 
@@ -119,7 +119,7 @@ h.pow.setHzMax(h.hz_max);
 % h.sg = h.pow.spectrogram(1:h.epochs_in_seg);
 % h.spectra.XTick = '';
 
-set_current_segment(h, 1)
+jump_to(h, 1)
 
 % Choose default command line output for sleeper
 h.output = hObject;
@@ -168,7 +168,8 @@ function btnSave_Callback(hObject, ~, h) %#ok<DEFNU>
 t = h.txtHypnoFName.String;
 h.txtHypnoFName.String = 'Saving...';
 hypnogram = h.score; %#ok<NASGU>
-save(t, 'hypnogram')
+markers = h.markers; %#ok<NASGU>
+save(t, 'hypnogram', 'markers')
 h.txtHypnoFName.String = 'Saved.';
 hObject.BackgroundColor = 'green';
 uiwait(h.window, 1);
@@ -182,7 +183,7 @@ h.setting_EEG_thr = true;
 guidata(hObject, h)
 
 %----------------------------------------------------- Abort marking event
-function btnCancelEvent_Callback(hObject, ~, h) %#ok<DEFNU>
+function btnCancelMarker_Callback(hObject, ~, h) %#ok<DEFNU>
 hObject.Visible = 'off';
 del_event_patches(h)
 
@@ -205,6 +206,21 @@ h.emgPlot.YLim = [-p p];
 h.emg_peak = p;
 guidata(h.window, h);
 
+%------------------------------------------------> Deleting current marker
+function btnDelMarker_Callback(~, ~, h) %#ok<DEFNU>
+x = questdlg('Delete this marker?', 'EEG Markers', 'No', 'Yes', 'Yes');
+switch x
+   case 'No'
+   case 'Yes'
+      mrk = h.sldMarkers.Value;
+      h.markers(mrk) = [];
+      h.cm = h.cm-1;
+      guidata(h.window, h)
+      set_marker_info(h, mrk)
+end
+
+
+
 
 %=========================================================================
 %==================================================== Capture mouse clicks
@@ -217,33 +233,18 @@ set(h.currEpoch, 'string', ceil(x_btn_pos(eventdata)));
 draw_epoch(h)
 
 function spectra_ButtonDownFcn(~, eventdata, h) %#ok<DEFNU>
-sset(h.currEpoch, 'string', ceil(x_btn_pos(eventdata)-.5));
+set(h.currEpoch, 'string', ceil(x_btn_pos(eventdata)-.5));
 draw_epoch(h)
 
 function eegPlot_ButtonDownFcn(~, eventdata, h) %#ok<DEFNU>
 if h.setting_EEG_thr
    setting_EEG_thr(h, eventdata)
 elseif h.setting_event
-   finish_event(h, x_btn_pos(eventdata))
+   finish_marker(h, x_btn_pos(eventdata))
 else % starting event
-   start_event(h, x_btn_pos(eventdata))
+   start_marker(h, x_btn_pos(eventdata))
 end
 
-function modify_event(pa, ~, ev, h)
-set([pa h.events(ev).finish_patch], 'facecolor', [1 0.5 0])
-s = inputdlg('Change event tag (accept empty to delete event)', 'Re-tag or delete event', 1);
-if ~isempty(s) % OK was pressed so we need to take action
-   if isempty(s{1})
-      delete([h.events(ev).start_patch h.events(ev).finish_patch])
-      h.events(ev) = [];
-      h.ce = h.ce-1;
-   else
-      h.events(ev).tag = s{1};
-   end
-else % restore original marker color
-   set([pa h.events(ev).finish_patch], 'facecolor', 'c')
-end
-guidata(h.window, h)
 
 %=========================================================================
 %====================================================== edit-box callbacks
@@ -254,7 +255,7 @@ function currSeg_Callback(hObject, ~, h) %#ok<DEFNU>
 t = uivalue(hObject);
 if t<1, t=1; end
 if t>h.num_segments, t=h.num_segments; end
-set_current_segment(h, t)
+jump_to(h, t)
 
 %------------------------------------------------------> Set current epoch
 function currEpoch_Callback(hObject, ~, h) %#ok<DEFNU>
@@ -269,7 +270,7 @@ function txtEpInSeg_Callback(hObject, ~, h) %#ok<DEFNU>
 h.epochs_in_seg = uivalue(hObject);
 h = update_parameters(h);
 guidata(hObject, h)
-set_current_segment(h, 1)
+jump_to(h, 1)
 
 %----------------------------------------------------> Set output filename
 function txtHypnoFName_Callback(hObject, ~, h) %#ok<DEFNU>
@@ -282,26 +283,32 @@ else
    h.btnSave.Enable = 'off';
 end
 
+%---------------------------------------------------------> Set marker tag
+function txtMarkerTag_Callback(hObject, ~, h) %#ok<DEFNU>
+mrk = h.sldMarkers.Value;
+h.markers(mrk).tag = hObject.String;
+guidata(hObject, h)
+
 %=========================================================================
 %======================================================== slider callbacks
 %=========================================================================
 
 %----------------------------------------------------> Set current segment
 function segment_Callback(hObject, ~, h) %#ok<DEFNU>
-v = round(get(hObject, 'Value'));
-set(hObject, 'Value', v)
-set_current_segment(h, v)
+jump_to(h, uisnapslider(hObject))
 
 %-------------------------------------- Browsing events through the slider
 function sldEvents_Callback(hObject, ~, h)
-v = round(hObject.Value);
-hObject.Value = v;
+v = uisnapslider(hObject);
+set_event_thr_label(h, v)
 h.lblCurrEvent.String = sprintf('%d of %d events', v, hObject.Max);
 epInSeg = uivalue(h.txtEpInSeg);
-h.currSeg.String = floor(h.watch_epochs(v)/epInSeg)+1;
-h.currEpoch.String = rem(h.watch_epochs(v), epInSeg)+1;
-draw_spectra(h)
-draw_epoch(h)
+jump_to(h, floor(h.watch_epochs(v)/epInSeg)+1, rem(h.watch_epochs(v), epInSeg)+1)
+
+%-------------------------------------- Browsing markers through the slider
+function sldMarkers_Callback(hObject, ~, h) %#ok<DEFNU>
+uisnapslider(hObject);
+set_marker_info(h)
 
 %=========================================================================
 %================================================================ UPDATING
@@ -316,11 +323,12 @@ h.num_segments = ceil(h.signal_len / h.segment_len);
 % the width (in samples) of the spectrogram/hypnogram charts
 h.segment_size = h.sampling_rate * h.segment_len;
 
-%------------------------------------------------------------> Set segment
-function set_current_segment(h, seg)
-set(h.currSeg, 'String', seg)
+%--------------------------------------------------> Set segment and epoch
+function jump_to(h, seg, epo)
+if nargin<3, epo=1; end
+h.currSeg.String = seg;
+h.currEpoch.String = epo;
 draw_spectra(h)
-set(h.currEpoch, 'string', 1)
 draw_epoch(h)
 
 %-------------------------------------------------------> Go to next epoch
@@ -358,11 +366,38 @@ if state <= length(h.states)
    next_epoch(h)
 end
 
+%--------------------------------------------------------> Set marker info
+function set_marker_info(h, mno)
+if nargin < 2, mno = h.sldMarkers.Value; end
+
+if h.cm == 0
+   h.txtMarkerTag.String = '';
+   h.sldMarkers.Enable = 'off';
+   h.lblMarkers.String = 'no markers';
+   draw_eeg(h, uivalue(h.currSeg), uivalue(h.currEpoch))
+else
+   if h.cm==1
+      h.sldMarkers.Enable = 'off';
+   else
+      set(h.sldMarkers, ...
+         'enable', 'on', ...
+         'max', h.cm, ...
+         'value', mno, ...
+         'SliderStep', [1/(h.cm-1), 10/(h.cm-1)]);
+   end
+   mrk = h.markers(mno);
+   jump_to(h, mrk.start_seg, mrk.start_epoch)
+   h.txtMarkerTag.String = mrk.tag;
+   h.lblMarkers.String = sprintf('%d of %d', mno, h.cm);
+   highlight_marker(h, mno)
+end
+
+
 %=========================================================================
 %========================================================== DRAWING THINGS
 %=========================================================================
 
-%---------------------------------------------------------- Redraw spectra
+%-----------------------------------------------------------> Draw spectra
 function draw_spectra(h)
 axes(h.spectra)
 sg = h.pow.spectrogram(seg_range(h, uivalue(h.currSeg)));
@@ -374,7 +409,7 @@ set(h.spectra, ...
    'TickLen', [.007 .007])
 box on
 
-%----------------------------------------------------- Redraw epoch charts
+%------------------------------------------------------> Draw epoch charts
 function draw_epoch(h)
 seg = uivalue(h.currSeg);
 epo = uivalue(h.currEpoch);
@@ -393,14 +428,15 @@ h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
 h.eegPlot.XTickLabel = '';
 
 % if this epoch contains event markers, draw them
-if h.ce
-   for ev = find(and([h.events.finish_seg]==seg, [h.events.finish_epoch]==epo))
-      h.events(ev).finish_patch = draw_event_finish(h, h.events(ev).finish_ms);
+if h.cm
+   for ev = find(and([h.markers.finish_seg]==seg, [h.markers.finish_epoch]==epo))
+      h.markers(ev).finish_patch = draw_marker_finish(h, h.markers(ev).finish_ms);
    end
-   for ev = find(and([h.events.start_seg]==seg, [h.events.start_epoch]==epo))
-      p = draw_event_start(h, h.events(ev).start_ms, ev);
-      h.events(ev).start_patch = p;
+   for ev = find(and([h.markers.start_seg]==seg, [h.markers.start_epoch]==epo))
+      p = draw_marker_start(h, h.markers(ev).start_ms, ev);
+      h.markers(ev).start_patch = p;
    end
+   guidata(h.window, h)
 end
 
 if isempty(h.emg), return; end
@@ -413,6 +449,7 @@ h.emgPlot.XTickLabel = l/h.sampling_rate;
 
 set([h.eegPlot, h.emgPlot], 'ticklength', [.007 .007])
 
+%-----------------------------------------------------> Draw the hypnogram
 function draw_hypno(h, seg, epo)
 axes(h.hypno)
 ns = length(h.states);
@@ -433,6 +470,7 @@ set(h.hypno, ...
    'ButtonDownFcn', @hypno_ButtonDownFcn);
 hold off
 
+%---------------------------------------------------> Draw the power curve
 function draw_power(h, seg, epo)
 axes(h.power)
 e = ep1(h, seg) + epo -1;
@@ -441,34 +479,25 @@ set(h.power, ...
    'ylim', [h.pow.MinPwr h.pow.MaxPwr], ...
    'ticklen', [.05 .05])
 
-function rv = seg_range(h, seg)
-rv = ep1(h, seg):epN(h, seg);
+%--------------------------------------------------> Draw the marker start
+function rv = draw_marker_start(h, x, mkr)
+axes(h.eegPlot)
+yl = h.eegPlot.YLim;
+rv = patch([x x x+h.epoch_size/40 x+1 x+1], ...
+           [yl(1) yl(2) yl(2) yl(2)/2 yl(1)], ...
+           'c', 'linestyle', 'none', ...
+           'ButtonDownFcn',{@modify_event, mkr, h}, ...
+           'PickableParts','all');
 
-function rv = ep1(h, seg)
-rv = (seg-1) * h.epochs_in_seg + 1;
+%----------------------------------------------------> Draw the marker end
+function rv = draw_marker_finish(h, x)
+axes(h.eegPlot)
+yl = h.eegPlot.YLim;
+rv = patch([x x x-h.epoch_size/40 x+1 x+1], [yl(1) yl(2)/2 yl(2) yl(2) yl(1)], 'c', 'linestyle', 'none');
 
-function rv = epN(h, seg)
-rv = min(seg * h.epochs_in_seg, h.tot_epochs);
-
-function find_events(h)
-over_thr = find(abs(h.eeg) > abs(h.event_thr));
-h.watch_epochs = unique(floor(over_thr / h.epoch_size));
-ne = length(h.watch_epochs);
-guidata(h.window, h)
-if ne==0
-   h.sldEvents.Visible = 'off';
-else
-   set(h.sldEvents, ...
-      'Visible', 'on', ...
-      'Min', 1, ...
-      'Max', ne, ...
-      'SliderStep', [1/(ne-1), 10/(ne-1)], ...
-      'Value', 1)
-   h.lblEventThr.String = sprintf('EEG Thr: %f', h.event_thr);
-   h.lblCurrEvent.Visible = 'on';
-   h.lblCurrEvent.String = sprintf('1 of %d events', ne);
-   sldEvents_Callback(h.sldEvents, 0, h)
-end
+%=========================================================================
+%========================================== Actions executed via callbacks
+%=========================================================================
 
 function setting_EEG_thr(h, eventdata)
 h.setting_EEG_thr = false;
@@ -479,58 +508,91 @@ guidata(h.window, h)
 x = inputdlg('Do you want to find events based on this threshold?', 'Finding events', 1, {num2str(cp)});
 if ~isempty(x), find_events(h); end
 
-function start_event(h, x)
-h.ce = h.ce+1;
-h.events(h.ce).start_seg = uivalue(h.currSeg);
-h.events(h.ce).start_epoch = uivalue(h.currEpoch);
-h.events(h.ce).start_ms = x;
-h.events(h.ce).start_patch = draw_event_start(h, x, h.ce);
+function find_events(h)
+over_thr = find(abs(h.eeg) > abs(h.event_thr));
+h.watch_epochs = unique(floor(over_thr / h.epoch_size));
+ne = length(h.watch_epochs);
+guidata(h.window, h)
+if ne==0
+   h.sldEvents.Enabled = 'off';
+else
+   set(h.sldEvents, ...
+      'Enable', 'on', ...
+      'Min', 1, ...
+      'Max', ne, ...
+      'SliderStep', [1/(ne-1), 10/(ne-1)], ...
+      'Value', 1)
+   set_event_thr_label(h, 1)
+   sldEvents_Callback(h.sldEvents, 0, h)
+end
+
+function start_marker(h, x)
+h.cm = h.cm+1;
+h.markers(h.cm).start_seg = uivalue(h.currSeg);
+h.markers(h.cm).start_epoch = uivalue(h.currEpoch);
+h.markers(h.cm).start_ms = x;
+h.markers(h.cm).start_patch = draw_marker_start(h, x, h.cm);
 h.setting_event = true;
-h.btnCancelEvent.Visible = 'on';
+h.btnCancelMarker.Visible = 'on';
 guidata(h.window, h)
 
-function finish_event(h, x)
-h.btnCancelEvent.Visible = 'off';
-h.events(h.ce).finish_seg = uivalue(h.currSeg);
-h.events(h.ce).finish_epoch = uivalue(h.currEpoch);
-h.events(h.ce).finish_ms = x;
-h.events(h.ce).finish_patch = draw_event_finish(h, x);
+function finish_marker(h, x)
+% make sure finish occurs after start!
+m = h.markers(h.cm);
+if m.start_seg > uivalue(h.currSeg) || ...
+      m.start_epoch > uivalue(h.currEpoch) || ...
+      (m.start_ms > x && m.start_epoch==uivalue(h.currEpoch))
+   beep
+   return
+end
+h.btnCancelMarker.Visible = 'off';
+h.markers(h.cm).finish_seg = uivalue(h.currSeg);
+h.markers(h.cm).finish_epoch = uivalue(h.currEpoch);
+h.markers(h.cm).finish_ms = x;
+h.markers(h.cm).finish_patch = draw_marker_finish(h, x);
 s = inputdlg('Assign tag to event or cancel', 'Tagging events', 1, {h.default_event_tag});
-if isempty(s)
-   delete([h.events(h.ce).start_patch h.events(h.ce).finish_patch]);
-   h.ce = h.ce-1;
-else
-   h.events(end).tag = s{1};
+if isempty(s) % never mind... ignore this marker
+   delete([h.markers(h.cm).start_patch h.markers(h.cm).finish_patch]);
+   h.cm = h.cm-1;
+else % we do have a new marker
+   h.markers(h.cm).tag = s{1};
    h.default_event_tag = s{1};
+   set_marker_info(h, h.cm)
 end
 h.setting_event = false;
 guidata(h.window, h)
 
-function rv = draw_event_start(h, x, ev)
-axes(h.eegPlot)
-yl = h.eegPlot.YLim;
-rv = patch([x x x+h.epoch_size/40 x+1 x+1], ...
-           [yl(1) yl(2) yl(2) yl(2)/2 yl(1)], ...
-           'c', 'linestyle', 'none', ...
-           'ButtonDownFcn',{@modify_event, ev, h}, ...
-           'PickableParts','all');
-
-function rv = draw_event_finish(h, x)
-axes(h.eegPlot)
-yl = h.eegPlot.YLim;
-rv = patch([x x x-h.epoch_size/40 x+1 x+1], [yl(1) yl(2)/2 yl(2) yl(2) yl(1)], 'c', 'linestyle', 'none');
-
 %=========================================================================
 % subfunctions/utilities
 %=========================================================================
+function highlight_marker(h, mrk)
+h = guidata(h.window); % not sure why this is necessary
+m = h.markers(mrk);
+p = m.start_patch;
+if ishandle(m.finish_patch), p = [p m.finish_patch]; end
+set(p, 'facecolor', [1 0.5 0])
+
+function set_event_thr_label(h, curr)
+s = sprintf('Event #%d of %d @ %f mV', curr, h.sldEvents.Max, h.event_thr);
+h.lblEventThr.String = s;
+
+function rv = seg_range(h, seg)
+rv = ep1(h, seg):epN(h, seg);
+
+function rv = ep1(h, seg)
+rv = (seg-1) * h.epochs_in_seg + 1;
+
+function rv = epN(h, seg)
+rv = min(seg * h.epochs_in_seg, h.tot_epochs);
+
 function del_event_patches(h, ev)
-if nargin<2, ev = h.ce; end
-delete(h.events(ev).start_patch)
+if nargin<2, ev = h.cm; end
+delete(h.markers(ev).start_patch)
 if nargin>1
-   delete(h.events(ev).finish_patch)
+   delete(h.markers(ev).finish_patch)
 end
-h.events(ev) = [];
-h.ce = h.ce-1;
+h.markers(ev) = [];
+h.cm = h.cm-1;
 h.setting_event = false;
 guidata(h.window, h)
 
@@ -552,3 +614,36 @@ function rv = global_eeg_position(h, x)
 s1 = (uivalue(h.currSeg)-1) * h.epochs_in_seg;
 s2 = uivalue(h.currEpoch)-1;
 rv = (s1+s2)* h.epoch_size + x;
+
+function rv = mrkstr
+rv = struct( ...
+   'start_seg', {}, ...
+   'start_epoch', {}, ...
+   'start_ms', {}, ...
+   'start_patch', {}, ...
+   'finish_seg', {}, ...
+   'finish_epoch', {}, ...
+   'finish_ms', {}, ...
+   'finish_patch', {}, ...
+   'tag', '');
+   
+function modify_event(pa, ~, ev, h)
+set_marker_info(h, ev)
+% highlight_marker(h, ev)
+% s = inputdlg('Change event tag (empty string to delete)', 'Re-tag or delete event', 1);
+% if ~isempty(s) % OK was pressed so we need to take action
+%    if isempty(s{1})
+%       delete([h.markers(ev).start_patch h.markers(ev).finish_patch])
+%       h.markers(ev) = [];
+%       h.cm = h.cm-1;
+%    else
+%       h.markers(ev).tag = s{1};
+%    end
+% else % restore original marker color
+%    set([pa h.markers(ev).finish_patch], 'facecolor', 'c')
+% end
+% guidata(h.window, h)
+
+% 
+%            'ButtonDownFcn',{@modify_event, ev, h}, ...
+%            'PickableParts','all'
