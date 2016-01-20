@@ -6,7 +6,7 @@ function varargout = sleeper(varargin)
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG
 
-% Last Modified by GUIDE v2.5 19-Jan-2016 17:57:53
+% Last Modified by GUIDE v2.5 20-Jan-2016 15:20:56
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -106,7 +106,7 @@ set(h.segment, ...
    'Max', h.num_segments, ...
    'Value', 1, ...
    'SliderStep', [1/(h.num_segments-1), 12/(h.num_segments-1)]);
-
+h.lblSegNum.String = sprintf('of %d', h.num_segments);
 %---------------------------------------------- Setting up the spectrogram
 h.pow = EEpower(h.eeg);
 h.pow.setHz(h.sampling_rate);
@@ -115,9 +115,7 @@ h.pow.setKsize(h.kernel_len);
 h.pow.setHzMin(h.hz_min);
 h.pow.setHzMax(h.hz_max);
 
-% axes(h.spectra)
-% h.sg = h.pow.spectrogram(1:h.epochs_in_seg);
-% h.spectra.XTick = '';
+h.spectrarrow = 0;
 
 jump_to(h, 1)
 
@@ -216,10 +214,26 @@ switch x
       h.markers(mrk) = [];
       h.cm = h.cm-1;
       guidata(h.window, h)
-      set_marker_info(h, mrk)
+      set_marker_info(h, min(mrk, h.cm))
 end
 
+%----------------------------------------------> Manually setting EEG YLim
+function btnEEGuV_Callback(~, ~, h) %#ok<DEFNU>
+curr_YLim = num2str(h.eegPlot.YLim(2));
+x = inputdlg('Set Y limit in microvolts', 'EEG plot', 1, {curr_YLim});
+if ~isempty(x)
+   l = str2double(x{1});
+   h.eegPlot.YLim = [-l l];   
+end
 
+%----------------------------------------------> Manually setting EMG YLim
+function btnEMGuV_Callback(~, ~, h) %#ok<DEFNU>
+curr_YLim = num2str(h.emgPlot.YLim(2));
+x = inputdlg('Set Y limit in microvolts', 'EMG plot', 1, {curr_YLim});
+if ~isempty(x)
+   l = str2double(x{1});
+   h.emgPlot.YLim = [-l l];   
+end
 
 
 %=========================================================================
@@ -368,7 +382,6 @@ end
 
 %--------------------------------------------------------> Set marker info
 function set_marker_info(h, mno)
-if nargin < 2, mno = h.sldMarkers.Value; end
 
 if h.cm == 0
    h.txtMarkerTag.String = '';
@@ -376,14 +389,16 @@ if h.cm == 0
    h.lblMarkers.String = 'no markers';
    draw_eeg(h, uivalue(h.currSeg), uivalue(h.currEpoch))
 else
-   if h.cm==1
+   if h.cm==1 % disable the slider
+      mno = 1;
+      h.sldMarkers.Value = 1;
       h.sldMarkers.Enable = 'off';
    else
-      set(h.sldMarkers, ...
-         'enable', 'on', ...
-         'max', h.cm, ...
-         'value', mno, ...
-         'SliderStep', [1/(h.cm-1), 10/(h.cm-1)]);
+      if nargin < 2, mno = h.sldMarkers.Value; end
+      h.sldMarkers.Enable     = 'on';
+      h.sldMarkers.Max        = h.cm;
+      h.sldMarkers.Value      = mno;
+      h.sldMarkers.SliderStep = [1/(h.cm-1), 10/(h.cm-1)];
    end
    mrk = h.markers(mno);
    jump_to(h, mrk.start_seg, mrk.start_epoch)
@@ -391,7 +406,6 @@ else
    h.lblMarkers.String = sprintf('%d of %d', mno, h.cm);
    highlight_marker(h, mno)
 end
-
 
 %=========================================================================
 %========================================================== DRAWING THINGS
@@ -402,12 +416,18 @@ function draw_spectra(h)
 axes(h.spectra)
 sg = h.pow.spectrogram(seg_range(h, uivalue(h.currSeg)));
 sg.HitTest = 'off';
-set(h.spectra, ...
-   'XLim', [0.5 h.epochs_in_seg+0.5], ...
-   'XTick', [], ...
-   'YLim', [h.hz_min h.hz_max]+0.5, ...
-   'TickLen', [.007 .007])
+h.spectra.XLim = [0.5 h.epochs_in_seg+0.5];
+h.spectra.YLim = [h.hz_min h.hz_max]+0.5;
+h.spectra.XTick = 0.5:10: h.epochs_in_seg+0.5;
+h.spectra.XTickLabel = 0:10:h.epochs_in_seg;
+h.spectra.TickLength = [.007 .007];
 box on
+% hold on
+% epo = uivalue(h.currEpoch);
+% disp(h.spectra.Layer)
+% h.spectrarrow = fill([epo-.5 epo+.5 epo+.5 epo-.5], [-5 -5 10 10], [1 .7 1]);
+% guidata(h.window, h)
+% hold off
 
 %------------------------------------------------------> Draw epoch charts
 function draw_epoch(h)
@@ -423,7 +443,7 @@ end
 %-------------------------------------------------------- Draw EEG and EMG
 function draw_eeg(h, seg, epo)
 axes(h.eegPlot)
-plot(eeg_for(h, seg, epo))
+plot(eeg_for(h, seg, epo), 'k')
 h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
 h.eegPlot.XTickLabel = '';
 
@@ -453,7 +473,7 @@ set([h.eegPlot, h.emgPlot], 'ticklength', [.007 .007])
 function draw_hypno(h, seg, epo)
 axes(h.hypno)
 ns = length(h.states);
-l = fill([epo-1 epo epo epo-1], [0 0 ns+1 ns+1], 'm');
+l = fill([epo-1 epo epo epo-1], [0 0 ns+1 ns+1], [1 .7 1]);
 set(l, 'linestyle', 'none')
 hold on
 y = h.score(seg_range(h, seg));
@@ -465,10 +485,20 @@ set(h.hypno, ...
    'ylim', [.5 .5+ns], ...
    'ytick', 1:ns, ...
    'xlim', [0 h.epochs_in_seg], ...
+   'xticklabel', '', ...
    'yticklabel', h.states, ...
    'layer', 'top', ...
    'ButtonDownFcn', @hypno_ButtonDownFcn);
 hold off
+
+%set(h.spectrarrow, 'XData', [epo-.5 epo+.5 epo+.5 epo-.5])
+% axes(h.spectra)
+% hold on
+% epo = uivalue(h.currEpoch);
+% fill([epo-1 epo epo epo-1], [-5 -5 10 10], [1 .7 1]);
+% hold off
+
+
 
 %---------------------------------------------------> Draw the power curve
 function draw_power(h, seg, epo)
