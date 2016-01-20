@@ -218,21 +218,25 @@ switch x
 end
 
 %----------------------------------------------> Manually setting EEG YLim
-function btnEEGuV_Callback(~, ~, h) %#ok<DEFNU>
+function btnEEGuV_Callback(hObject, ~, h) %#ok<DEFNU>
 curr_YLim = num2str(h.eegPlot.YLim(2));
 x = inputdlg('Set Y limit in microvolts', 'EEG plot', 1, {curr_YLim});
 if ~isempty(x)
    l = str2double(x{1});
-   h.eegPlot.YLim = [-l l];   
+   h.eegPlot.YLim = [-l l];
+   h.eeg_peak = l;
+   guidata(hObject, h)
 end
 
 %----------------------------------------------> Manually setting EMG YLim
-function btnEMGuV_Callback(~, ~, h) %#ok<DEFNU>
+function btnEMGuV_Callback(hObject, ~, h) %#ok<DEFNU>
 curr_YLim = num2str(h.emgPlot.YLim(2));
 x = inputdlg('Set Y limit in microvolts', 'EMG plot', 1, {curr_YLim});
 if ~isempty(x)
    l = str2double(x{1});
    h.emgPlot.YLim = [-l l];   
+   h.emg_peak = l;
+   guidata(hObject, h)
 end
 
 
@@ -443,7 +447,8 @@ end
 %-------------------------------------------------------- Draw EEG and EMG
 function draw_eeg(h, seg, epo)
 axes(h.eegPlot)
-plot(eeg_for(h, seg, epo), 'k')
+p = plot(eeg_for(h, seg, epo), 'k');
+set(p, 'hittest', 'off')
 h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
 h.eegPlot.XTickLabel = '';
 
@@ -462,7 +467,8 @@ end
 if isempty(h.emg), return; end
 
 axes(h.emgPlot)
-plot(emg_for(h, seg, epo))
+p = plot(emg_for(h, seg, epo), 'k');
+set(p, 'hittest', 'off')
 h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
 l = str2double(h.emgPlot.XTickLabel);
 h.emgPlot.XTickLabel = l/h.sampling_rate;
@@ -478,7 +484,8 @@ set(l, 'linestyle', 'none')
 hold on
 y = h.score(seg_range(h, seg));
 x = 0:length(y)-1;
-stairs(x, y);
+s = stairs(x, y);
+set(s, 'hittest', 'off')
 set(h.hypno, ...
    'ticklen', [.007 .007], ...
    'tickdir', 'out', ...
