@@ -377,7 +377,7 @@ draw_epoch(h)
 
 %--------------------------------------------------------> Set epoch state
 function set_state(h, state)
-if state <= length(h.states)
+if isnan(state) || state <= length(h.states)
    e = h.epochs_in_seg * (uivalue(h.currSeg) - 1) + uivalue(h.currEpoch);
    h.score(e) = state;
    guidata(h.window, h)
@@ -484,8 +484,7 @@ set(l, 'linestyle', 'none')
 hold on
 y = h.score(seg_range(h, seg));
 x = 0:length(y)-1;
-s = stairs(x, y);
-set(s, 'hittest', 'off')
+stairs(x, y, 'hittest', 'off', 'color', 'k');
 set(h.hypno, ...
    'ticklen', [.007 .007], ...
    'tickdir', 'out', ...
