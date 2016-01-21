@@ -107,6 +107,7 @@ set(h.segment, ...
    'Value', 1, ...
    'SliderStep', [1/(h.num_segments-1), 12/(h.num_segments-1)]);
 h.lblSegNum.String = sprintf('of %d', h.num_segments);
+h.actiPlot.XTickLabel = '';
 %---------------------------------------------- Setting up the spectrogram
 h.pow = EEpower(h.eeg);
 h.pow.setHz(h.sampling_rate);
