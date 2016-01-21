@@ -46,7 +46,7 @@ p.addParameter('KLength',   1, @isnumeric)
 p.addParameter('EEGPeak',   0, @ispositivescalar)
 p.addParameter('EMGPeak',   0, @ispositivescalar)
 p.addParameter('MinHz',     0, @isintscalar)
-p.addParameter('MaxHz',    30, @isintscalar)
+p.addParameter('MaxHz',    20, @isintscalar)
 p.addParameter('States', {'REM', 'nREM', 'Wake'}, @iscell)
 p.parse(eeg, varargin{:})
 %------------------------------ transfer inputParser Results to the handle
@@ -457,10 +457,9 @@ end
 %-------------------------------------------------------- Draw EEG and EMG
 function draw_eeg(h, seg, epo)
 axes(h.eegPlot)
-p = plot(eeg_for(h, seg, epo), 'k');
-set(p, 'hittest', 'off')
+sig = eeg_for(h, seg, epo);
+plot(sig, 'k', 'hittest', 'off')
 h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
-h.eegPlot.XTickLabel = '';
 
 % if this epoch contains event markers, draw them
 if h.cm
@@ -474,16 +473,20 @@ if h.cm
    guidata(h.window, h)
 end
 
-if isempty(h.emg), return; end
+if ~isempty(h.emg)
+   axes(h.emgPlot)
+   plot(emg_for(h, seg, epo), 'k', 'hittest', 'off');
+   h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
+   h.emgPlot.XTickLabel = '';
+end
 
-axes(h.emgPlot)
-p = plot(emg_for(h, seg, epo), 'k');
-set(p, 'hittest', 'off')
-h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
-l = str2double(h.emgPlot.XTickLabel);
-h.emgPlot.XTickLabel = l/h.sampling_rate;
+sp = 0:h.scoring_epoch;
 
-set([h.eegPlot, h.emgPlot], 'ticklength', [.007 .007])
+set([h.eegPlot, h.emgPlot, h.actiPlot], ...
+   'ticklength', [.007 .007], ...
+   'xlim', [0 length(sig)], ...
+   'xtick', sp*h.sampling_rate)
+h.eegPlot.XTickLabel = sp;
 
 %-----------------------------------------------------> Draw the hypnogram
 function draw_hypno(h, seg, epo)
@@ -506,15 +509,6 @@ set(h.hypno, ...
    'layer', 'top', ...
    'ButtonDownFcn', @hypno_ButtonDownFcn);
 hold off
-
-%set(h.spectrarrow, 'XData', [epo-.5 epo+.5 epo+.5 epo-.5])
-% axes(h.spectra)
-% hold on
-% epo = uivalue(h.currEpoch);
-% fill([epo-1 epo epo epo-1], [-5 -5 10 10], [1 .7 1]);
-% hold off
-
-
 
 %---------------------------------------------------> Draw the power curve
 function draw_power(h, seg, epo)
@@ -673,23 +667,5 @@ rv = struct( ...
    'finish_patch', {}, ...
    'tag', '');
    
-function modify_event(pa, ~, ev, h)
+function modify_event(~, ~, ev, h)
 set_marker_info(h, ev)
-% highlight_marker(h, ev)
-% s = inputdlg('Change event tag (empty string to delete)', 'Re-tag or delete event', 1);
-% if ~isempty(s) % OK was pressed so we need to take action
-%    if isempty(s{1})
-%       delete([h.markers(ev).start_patch h.markers(ev).finish_patch])
-%       h.markers(ev) = [];
-%       h.cm = h.cm-1;
-%    else
-%       h.markers(ev).tag = s{1};
-%    end
-% else % restore original marker color
-%    set([pa h.markers(ev).finish_patch], 'facecolor', 'c')
-% end
-% guidata(h.window, h)
-
-% 
-%            'ButtonDownFcn',{@modify_event, ev, h}, ...
-%            'PickableParts','all'
