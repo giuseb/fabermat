@@ -37,16 +37,16 @@ function sleeper_OpeningFcn(hObject, ~, h, eeg, varargin)
 p = inputParser;
 p.addRequired('EEG', @isnumeric)
 p.addOptional('EMG',       [], @isnumeric)
-p.addParameter('SRate',   500, @isnumeric)
-p.addParameter('Epoch',    10, @isnumeric)
-p.addParameter('EpInSeg', 180, @isnumeric)
+p.addParameter('SRate',   500, @isintscalar)
+p.addParameter('Epoch',    10, @isintscalar)
+p.addParameter('EpInSeg', 180, @isintscalar)
 p.addParameter('Hypno',    [], @isnumeric)
 p.addParameter('Markers', mrkstr, @isstruct)
 p.addParameter('KLength',   1, @isnumeric)
-p.addParameter('EEGPeak',   1, @isnumeric)
-p.addParameter('EMGPeak', 0.5, @isnumeric)
-p.addParameter('MinHz',     0, @isnumeric)
-p.addParameter('MaxHz',    30, @isnumeric)
+p.addParameter('EEGPeak',   0, @ispositivescalar)
+p.addParameter('EMGPeak',   0, @ispositivescalar)
+p.addParameter('MinHz',     0, @isintscalar)
+p.addParameter('MaxHz',    30, @isintscalar)
 p.addParameter('States', {'REM', 'nREM', 'Wake'}, @iscell)
 p.parse(eeg, varargin{:})
 %------------------------------ transfer inputParser Results to the handle
@@ -64,8 +64,17 @@ h.hz_min        = r.MinHz;   % only plot spectra above this
 h.hz_max        = r.MaxHz;   % only plot spectra below this
 h.states        = r.States;
 
-h.eeg_peak = max(h.eeg)*1.05; % the eeg charts' initial ylim
-h.emg_peak = max(h.emg)*1.05; % the emg charts' initial ylim
+% the eeg & emg charts' initial ylim
+if r.EEGPeak == 0
+   h.eeg_peak = max(h.eeg)*1.05;
+else
+   h.eeg_peak = r.EEGPeak;
+end
+if r.EMGPeak == 0
+   h.emg_peak = max(h.emg)*1.05;
+else
+   h.emg_peak = r.EMGPeak;
+end
 
 %------------------------------------------------------------------- flags
 h.setting_EEG_thr = false;
