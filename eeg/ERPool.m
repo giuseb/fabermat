@@ -91,6 +91,7 @@ classdef ERPool < handle
             d(x,:) = obj.average(x);
          end
          rv = plot(obj.time_range, d);
+         set(gca, 'xlim', [-obj.baseline obj.response])
       end
       
       function rv = time_range(obj)
