@@ -1,8 +1,11 @@
 function varargout = sleeper(varargin)
-% SLEEPER - sleep scoring system
-%      Sleeper is a GUI tool aimed at facilitating vigilance state scoring
-%      based on one EEG and (optionally) one EMG signal.
+% SLEEPER - sleep scoring and seizure detection system
+%      Sleeper is a GUI tool aimed at facilitating vigilance state scoring.
+%      Additionally, it aids the detection of abnormal brain activity.
+%      Sleeper currently supports one EEG, one EMG signal, and one
+%      actigram as data sources.
 %
+%      
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG
 
