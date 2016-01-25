@@ -1,7 +1,10 @@
 function varargout = sleeper(varargin)
-% SLEEPER - sleep scoring system
-%      Sleeper is a GUI tool aimed at facilitating vigilance state scoring
-%      based on one EEG and (optionally) one EMG signal.
+% SLEEPER - sleep scoring and seizure detection system
+%      Sleeper is a GUI tool aimed at facilitating vigilance state scoring.
+%      Additionally, it aids the detection of abnormal brain activity.
+%      Sleeper currently supports one EEG, one EMG signal, and one
+%      actigram as data sources.
+%
 %
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG
@@ -37,16 +40,16 @@ function sleeper_OpeningFcn(hObject, ~, h, eeg, varargin)
 p = inputParser;
 p.addRequired('EEG', @isnumeric)
 p.addOptional('EMG',       [], @isnumeric)
-p.addParameter('SRate',   500, @isnumeric)
-p.addParameter('Epoch',    10, @isnumeric)
-p.addParameter('EpInSeg', 180, @isnumeric)
+p.addParameter('SRate',   500, @isintscalar)
+p.addParameter('Epoch',    10, @isintscalar)
+p.addParameter('EpInSeg', 180, @isintscalar)
 p.addParameter('Hypno',    [], @isnumeric)
 p.addParameter('Markers', mrkstr, @isstruct)
 p.addParameter('KLength',   1, @isnumeric)
-p.addParameter('EEGPeak',   1, @isnumeric)
-p.addParameter('EMGPeak', 0.5, @isnumeric)
-p.addParameter('MinHz',     0, @isnumeric)
-p.addParameter('MaxHz',    30, @isnumeric)
+p.addParameter('EEGPeak',   0, @ispositivescalar)
+p.addParameter('EMGPeak',   0, @ispositivescalar)
+p.addParameter('MinHz',     0, @isintscalar)
+p.addParameter('MaxHz',    20, @isintscalar)
 p.addParameter('States', {'REM', 'nREM', 'Wake'}, @iscell)
 p.parse(eeg, varargin{:})
 %------------------------------ transfer inputParser Results to the handle
@@ -64,12 +67,37 @@ h.hz_min        = r.MinHz;   % only plot spectra above this
 h.hz_max        = r.MaxHz;   % only plot spectra below this
 h.states        = r.States;
 
-h.eeg_peak = max(h.eeg)*1.05; % the eeg charts' initial ylim
-h.emg_peak = max(h.emg)*1.05; % the emg charts' initial ylim
+% the eeg & emg charts' initial ylim
+if r.EEGPeak == 0
+   h.eeg_peak = max(h.eeg)*1.05;
+else
+   h.eeg_peak = r.EEGPeak;
+end
+if r.EMGPeak == 0
+   h.emg_peak = max(h.emg)*1.05;
+else
+   h.emg_peak = r.EMGPeak;
+end
+
+%------------------------------------------------------------------- States
+
+h.SCORING      = 0;
+h.MARKING      = 1;
+h.THRESHOLDING = 2;
+h.ZOOMINIT     = 3;
+h.ZOOMING      = 4;
+h.ZOOMED       = 5;
+
+h.state = h.SCORING;
+
 
 %------------------------------------------------------------------- flags
 h.setting_EEG_thr = false;
-h.setting_event = false;
+h.setting_event   = false;
+h.setting_zoom    = false;
+h.finishing_zoom  = false;
+h.zoom_start = 0;
+h.zoom_end   = 0;
 h.default_event_tag = 'Tag';
 
 %------------ compute here parameters that cannot be changed while scoring
@@ -107,6 +135,7 @@ set(h.segment, ...
    'Value', 1, ...
    'SliderStep', [1/(h.num_segments-1), 12/(h.num_segments-1)]);
 h.lblSegNum.String = sprintf('of %d', h.num_segments);
+h.actiPlot.XTickLabel = '';
 %---------------------------------------------- Setting up the spectrogram
 h.pow = EEpower(h.eeg);
 h.pow.setHz(h.sampling_rate);
@@ -155,6 +184,8 @@ switch key.Key
       set_state(h, 9)
    case 'n'
       set_state(h, nan)
+   case 'z'
+      toggle_zoom(h)
 end
 
 %=========================================================================
@@ -176,7 +207,7 @@ h.txtHypnoFName.String = t;
 
 %---------------------------------------------- Setting an event threshold
 function btnSetEEGThr_Callback(hObject, ~, h) %#ok<DEFNU>
-set(h.eegPlot, 'color', 'y')
+highlight_eeg(h, 'thres')
 h.setting_EEG_thr = true;
 guidata(hObject, h)
 
@@ -234,7 +265,7 @@ curr_YLim = num2str(h.emgPlot.YLim(2));
 x = inputdlg('Set Y limit in microvolts', 'EMG plot', 1, {curr_YLim});
 if ~isempty(x)
    l = str2double(x{1});
-   h.emgPlot.YLim = [-l l];   
+   h.emgPlot.YLim = [-l l];
    h.emg_peak = l;
    guidata(hObject, h)
 end
@@ -255,7 +286,9 @@ set(h.currEpoch, 'string', ceil(x_btn_pos(eventdata)-.5));
 draw_epoch(h)
 
 function eegPlot_ButtonDownFcn(~, eventdata, h) %#ok<DEFNU>
-if h.setting_EEG_thr
+if h.setting_zoom
+   set_zoom(h, eventdata)
+elseif h.setting_EEG_thr
    setting_EEG_thr(h, eventdata)
 elseif h.setting_event
    finish_marker(h, x_btn_pos(eventdata))
@@ -331,6 +364,8 @@ set_marker_info(h)
 %=========================================================================
 %================================================================ UPDATING
 %=========================================================================
+
+%----------------------------------------------------------> Set state
 
 %----------------------------------------------------------> Update params
 function h = update_parameters(h)
@@ -447,10 +482,9 @@ end
 %-------------------------------------------------------- Draw EEG and EMG
 function draw_eeg(h, seg, epo)
 axes(h.eegPlot)
-p = plot(eeg_for(h, seg, epo), 'k');
-set(p, 'hittest', 'off')
+sig = eeg_for(h, seg, epo);
+plot(sig, 'k', 'hittest', 'off')
 h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
-h.eegPlot.XTickLabel = '';
 
 % if this epoch contains event markers, draw them
 if h.cm
@@ -464,16 +498,20 @@ if h.cm
    guidata(h.window, h)
 end
 
-if isempty(h.emg), return; end
+if ~isempty(h.emg)
+   axes(h.emgPlot)
+   plot(emg_for(h, seg, epo), 'k', 'hittest', 'off');
+   h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
+   h.emgPlot.XTickLabel = '';
+end
 
-axes(h.emgPlot)
-p = plot(emg_for(h, seg, epo), 'k');
-set(p, 'hittest', 'off')
-h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
-l = str2double(h.emgPlot.XTickLabel);
-h.emgPlot.XTickLabel = l/h.sampling_rate;
+sp = 0:h.scoring_epoch;
 
-set([h.eegPlot, h.emgPlot], 'ticklength', [.007 .007])
+set([h.eegPlot, h.emgPlot, h.actiPlot], ...
+   'ticklength', [.007 .007], ...
+   'xlim', [0 length(sig)], ...
+   'xtick', sp*h.sampling_rate)
+h.eegPlot.XTickLabel = sp;
 
 %-----------------------------------------------------> Draw the hypnogram
 function draw_hypno(h, seg, epo)
@@ -496,15 +534,6 @@ set(h.hypno, ...
    'layer', 'top', ...
    'ButtonDownFcn', @hypno_ButtonDownFcn);
 hold off
-
-%set(h.spectrarrow, 'XData', [epo-.5 epo+.5 epo+.5 epo-.5])
-% axes(h.spectra)
-% hold on
-% epo = uivalue(h.currEpoch);
-% fill([epo-1 epo epo epo-1], [-5 -5 10 10], [1 .7 1]);
-% hold off
-
-
 
 %---------------------------------------------------> Draw the power curve
 function draw_power(h, seg, epo)
@@ -535,11 +564,43 @@ rv = patch([x x x-h.epoch_size/40 x+1 x+1], [yl(1) yl(2)/2 yl(2) yl(2) yl(1)], '
 %========================================== Actions executed via callbacks
 %=========================================================================
 
+function toggle_zoom(h)
+% cannot zoom while doing other things
+if h.setting_EEG_thr || h.setting_event
+   beep
+   return
+end
+h.setting_zoom = ~h.setting_zoom;
+if h.setting_zoom
+   highlight_eeg(h, 'zoom')
+else
+   highlight_eeg(h, 'normal')
+end
+guidata(h.window, h)
+
+function set_zoom(h, eventdata)
+x = x_btn_pos(eventdata);
+axes(h.eegPlot)
+hold on
+line([x x], [-h.eeg_peak h.eeg_peak])
+hold off
+if h.finishing_zoom
+   h.finishing_zoom = false;
+   h.setting_zoom   = false;
+   h.zoom_end = global_eeg_position(h, x);
+   draw_zoomed_eeg(h);
+else
+   h.zoom_start = global_eeg_position(h, x);
+   h.finishing_zoom = true;
+end
+guidata(h.window, h)
+
+
 function setting_EEG_thr(h, eventdata)
 h.setting_EEG_thr = false;
 cp = eventdata.IntersectionPoint(2);
 h.event_thr = cp;
-h.eegPlot.Color = 'w';
+highlight_eeg(h, 'normal')
 guidata(h.window, h)
 x = inputdlg('Do you want to find events based on this threshold?', 'Finding events', 1, {num2str(cp)});
 if ~isempty(x), find_events(h); end
@@ -601,6 +662,19 @@ guidata(h.window, h)
 %=========================================================================
 % subfunctions/utilities
 %=========================================================================
+
+% format eegPlot according to current state
+function highlight_eeg(h, style)
+switch style
+   case 'zoom'
+      h.eegPlot.Color = [.961 .922 .922];
+   case 'normal'
+      h.eegPlot.Color = 'white';
+   case 'thres'
+      h.eegPlot.Color = 'yellow';
+end
+
+
 function highlight_marker(h, mrk)
 h = guidata(h.window); % not sure why this is necessary
 m = h.markers(mrk);
@@ -662,24 +736,6 @@ rv = struct( ...
    'finish_ms', {}, ...
    'finish_patch', {}, ...
    'tag', '');
-   
-function modify_event(pa, ~, ev, h)
-set_marker_info(h, ev)
-% highlight_marker(h, ev)
-% s = inputdlg('Change event tag (empty string to delete)', 'Re-tag or delete event', 1);
-% if ~isempty(s) % OK was pressed so we need to take action
-%    if isempty(s{1})
-%       delete([h.markers(ev).start_patch h.markers(ev).finish_patch])
-%       h.markers(ev) = [];
-%       h.cm = h.cm-1;
-%    else
-%       h.markers(ev).tag = s{1};
-%    end
-% else % restore original marker color
-%    set([pa h.markers(ev).finish_patch], 'facecolor', 'c')
-% end
-% guidata(h.window, h)
 
-% 
-%            'ButtonDownFcn',{@modify_event, ev, h}, ...
-%            'PickableParts','all'
+function modify_event(~, ~, ev, h)
+set_marker_info(h, ev)
