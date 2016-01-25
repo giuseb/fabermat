@@ -18,6 +18,9 @@ classdef ERPool < handle
    %ep = ERPool(..., 'Response', MS) sets the analysis epoch in
    %     milliseconds following stimulus onset; the default value is 600
    %
+   %Note that the above parameters can also be set at a later time, e.g.:
+   %     ep.Response = 500;
+   %
    %mx = ep.trials(CODE)
    %     returns a matrix of responses (one row for each repetition)
    %     time-locked to the stimulus indicated by CODE.
@@ -28,13 +31,15 @@ classdef ERPool < handle
    %
    %tr = ep.time_range
    %     returns an array of time points in milliseconds corresponding to
-   %     the analysis epoch (eg: -200:1/KHz:600); useful for plotting ERPs:
+   %     the analysis epoch (eg: -200:1/KHz:600); useful for plotting ERPs
+   %     if you are not using the built-in plot function (see below)
    %
    %     plot(ep.time_range, ep.average(CODE))
    %
    %ph = ep.plot(CODE)
    %     plots average ERPs time-locked to the stimulus specified by CODE.
-   %     If CODE is omitted, all events are plotted as separate lines.
+   %     If CODE is omitted, all trials are plotted as separate lines, one
+   %     for each CODE found. Returns the handle to the PLOT object
    
    properties (SetAccess = private)
       Hz
