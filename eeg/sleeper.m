@@ -5,7 +5,7 @@ function varargout = sleeper(varargin)
 %      Sleeper currently supports one EEG, one EMG signal, and one
 %      actigram as data sources.
 %
-%      
+%
 %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
 %      in EEG
 
@@ -79,9 +79,25 @@ else
    h.emg_peak = r.EMGPeak;
 end
 
+%------------------------------------------------------------------- States
+
+h.SCORING      = 0;
+h.MARKING      = 1;
+h.THRESHOLDING = 2;
+h.ZOOMINIT     = 3;
+h.ZOOMING      = 4;
+h.ZOOMED       = 5;
+
+h.state = h.SCORING;
+
+
 %------------------------------------------------------------------- flags
 h.setting_EEG_thr = false;
-h.setting_event = false;
+h.setting_event   = false;
+h.setting_zoom    = false;
+h.finishing_zoom  = false;
+h.zoom_start = 0;
+h.zoom_end   = 0;
 h.default_event_tag = 'Tag';
 
 %------------ compute here parameters that cannot be changed while scoring
@@ -168,6 +184,8 @@ switch key.Key
       set_state(h, 9)
    case 'n'
       set_state(h, nan)
+   case 'z'
+      toggle_zoom(h)
 end
 
 %=========================================================================
@@ -189,7 +207,7 @@ h.txtHypnoFName.String = t;
 
 %---------------------------------------------- Setting an event threshold
 function btnSetEEGThr_Callback(hObject, ~, h) %#ok<DEFNU>
-set(h.eegPlot, 'color', 'y')
+highlight_eeg(h, 'thres')
 h.setting_EEG_thr = true;
 guidata(hObject, h)
 
@@ -247,7 +265,7 @@ curr_YLim = num2str(h.emgPlot.YLim(2));
 x = inputdlg('Set Y limit in microvolts', 'EMG plot', 1, {curr_YLim});
 if ~isempty(x)
    l = str2double(x{1});
-   h.emgPlot.YLim = [-l l];   
+   h.emgPlot.YLim = [-l l];
    h.emg_peak = l;
    guidata(hObject, h)
 end
@@ -268,7 +286,9 @@ set(h.currEpoch, 'string', ceil(x_btn_pos(eventdata)-.5));
 draw_epoch(h)
 
 function eegPlot_ButtonDownFcn(~, eventdata, h) %#ok<DEFNU>
-if h.setting_EEG_thr
+if h.setting_zoom
+   set_zoom(h, eventdata)
+elseif h.setting_EEG_thr
    setting_EEG_thr(h, eventdata)
 elseif h.setting_event
    finish_marker(h, x_btn_pos(eventdata))
@@ -344,6 +364,8 @@ set_marker_info(h)
 %=========================================================================
 %================================================================ UPDATING
 %=========================================================================
+
+%----------------------------------------------------------> Set state
 
 %----------------------------------------------------------> Update params
 function h = update_parameters(h)
@@ -542,11 +564,43 @@ rv = patch([x x x-h.epoch_size/40 x+1 x+1], [yl(1) yl(2)/2 yl(2) yl(2) yl(1)], '
 %========================================== Actions executed via callbacks
 %=========================================================================
 
+function toggle_zoom(h)
+% cannot zoom while doing other things
+if h.setting_EEG_thr || h.setting_event
+   beep
+   return
+end
+h.setting_zoom = ~h.setting_zoom;
+if h.setting_zoom
+   highlight_eeg(h, 'zoom')
+else
+   highlight_eeg(h, 'normal')
+end
+guidata(h.window, h)
+
+function set_zoom(h, eventdata)
+x = x_btn_pos(eventdata);
+axes(h.eegPlot)
+hold on
+line([x x], [-h.eeg_peak h.eeg_peak])
+hold off
+if h.finishing_zoom
+   h.finishing_zoom = false;
+   h.setting_zoom   = false;
+   h.zoom_end = global_eeg_position(h, x);
+   draw_zoomed_eeg(h);
+else
+   h.zoom_start = global_eeg_position(h, x);
+   h.finishing_zoom = true;
+end
+guidata(h.window, h)
+
+
 function setting_EEG_thr(h, eventdata)
 h.setting_EEG_thr = false;
 cp = eventdata.IntersectionPoint(2);
 h.event_thr = cp;
-h.eegPlot.Color = 'w';
+highlight_eeg(h, 'normal')
 guidata(h.window, h)
 x = inputdlg('Do you want to find events based on this threshold?', 'Finding events', 1, {num2str(cp)});
 if ~isempty(x), find_events(h); end
@@ -608,6 +662,19 @@ guidata(h.window, h)
 %=========================================================================
 % subfunctions/utilities
 %=========================================================================
+
+% format eegPlot according to current state
+function highlight_eeg(h, style)
+switch style
+   case 'zoom'
+      h.eegPlot.Color = [.961 .922 .922];
+   case 'normal'
+      h.eegPlot.Color = 'white';
+   case 'thres'
+      h.eegPlot.Color = 'yellow';
+end
+
+
 function highlight_marker(h, mrk)
 h = guidata(h.window); % not sure why this is necessary
 m = h.markers(mrk);
@@ -669,6 +736,6 @@ rv = struct( ...
    'finish_ms', {}, ...
    'finish_patch', {}, ...
    'tag', '');
-   
+
 function modify_event(~, ~, ev, h)
 set_marker_info(h, ev)
