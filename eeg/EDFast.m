@@ -64,7 +64,7 @@ classdef EDFast < handle
    
    properties (Access = private)
       ActiveSignal
-       NumMemBlocks
+      NumMemBlocks
       BlockSize
       BlockBounds
       SSize
@@ -176,6 +176,12 @@ classdef EDFast < handle
          if obj.SignalHeader(obj.ActiveSignal).physical_min > 0
             rv = -rv;
          end
+      end
+      
+      % return the datetime for the recording start
+      function dt = datetime(obj)
+         ds = [obj.Header.recording_startdate obj.Header.recording_starttime];
+         dt = datetime(ds, 'Inputformat', 'dd.MM.yyHH.mm.ss');
       end
       
       function save_signal(obj, filename, varname, signal) %#ok<INUSD,INUSL>
