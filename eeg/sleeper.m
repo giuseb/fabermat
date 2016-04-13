@@ -403,18 +403,9 @@ function sldMarkers_Callback(hObject, ~, h) %#ok<DEFNU>
    set_marker_info(h);
 end
 %=========================================================================
-%================================================================ UPDATING
+%================================================================ BROWSING
 %=========================================================================
 
-%----------------------------------------------------------> Update params
-function h = update_parameters(h)
-   % spectro/hypnogram chart duration in seconds
-   h.segment_len   = h.scoring_epoch * h.epochs_in_seg;
-   % number of segments in the signal
-   h.num_segments = ceil(h.signal_len / h.segment_len);
-   % the width (in samples) of the spectrogram/hypnogram charts
-   h.segment_size = h.sampling_rate * h.segment_len;
-end
 %--------------------------------------------------> Set segment and epoch
 function h = jump_to(h, seg, epo)
    if nargin<3, epo=1; end
@@ -422,7 +413,6 @@ function h = jump_to(h, seg, epo)
    h.currEpoch.String = epo;
    draw_spectra(h)
    h = draw_epoch(h);
-   % guidata(h.window, h)
 end
 %-------------------------------------------------------> Go to next epoch
 function h = next_epoch(h)
@@ -827,3 +817,13 @@ end
 function modify_event(~, ~, ev, h)
    set_marker_info(h, ev);
 end
+%----------------------------------------------------------> Update params
+function h = update_parameters(h)
+   % spectro/hypnogram chart duration in seconds
+   h.segment_len   = h.scoring_epoch * h.epochs_in_seg;
+   % number of segments in the signal
+   h.num_segments = ceil(h.signal_len / h.segment_len);
+   % the width (in samples) of the spectrogram/hypnogram charts
+   h.segment_size = h.sampling_rate * h.segment_len;
+end
+

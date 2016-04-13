@@ -1,8 +1,8 @@
 %% testing the sleeper GUI
 clear
-clear classes %#ok<*CLSCR>
+clear classes %#ok<*CLCLS>
 load test_sleeper.mat
-sleeper(eeg, emg)
+sleeper(-eeg, emg)
 
 %% looking at power spectra over SWD episodes
 

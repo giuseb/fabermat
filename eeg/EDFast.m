@@ -48,6 +48,10 @@ classdef EDFast < handle
    
    properties (SetAccess = private)
       Filename
+      SigMatPath
+      RecStart
+      RecEnd
+      SigLabels
       Header = struct
       SignalHeader = struct(...
          'signal_labels', {}, ...
@@ -69,6 +73,7 @@ classdef EDFast < handle
       BlockBounds
       SSize
       SigMask
+      SigMatObj
    end
    
    properties (Constant, Access = private)
@@ -143,6 +148,14 @@ classdef EDFast < handle
             end
          end
          fclose(fid);
+         
+         % set up rec start and end
+         ds = [obj.Header.recording_startdate obj.Header.recording_starttime];
+         off = obj.Header.num_data_records * obj.Header.data_record_duration;
+         obj.RecStart = datetime(ds, 'Inputformat', 'dd.MM.yyHH.mm.ss');
+         obj.RecEnd   = obj.RecStart + seconds(off);
+         % set up signal labels
+         obj.SigLabels = {obj.SignalHeader.signal_labels};
       end
       
       % Return an entire signal as a vector
@@ -177,22 +190,19 @@ classdef EDFast < handle
             rv = -rv;
          end
       end
-      
-      % return the datetime for the recording start
-      function dt = datetime(obj)
-         ds = [obj.Header.recording_startdate obj.Header.recording_starttime];
-         dt = datetime(ds, 'Inputformat', 'dd.MM.yyHH.mm.ss');
+            
+      function SigMatSetup(obj, fn)
+         obj.SigMatObj = SigMat(fn, obj.RecStart, obj.RecEnd);
+         obj.SigMatPath = obj.SigMatObj.Properties.Source;
       end
       
-      function save_signal(obj, filename, varname, signal) %#ok<INUSD,INUSL>
-         eval([varname '= obj.get_signal(signal);']);
-         save(filename, varname, '-v7.3')
+      function save_signal(obj, signal, label)
+         if nargin < 3
+            label = regexprep(obj.SigLabels{signal}, '\W', '_');
+         end
+         obj.SigMatObj.write(label, obj.get_signal(signal));
       end
       
-      function append_signal(obj, filename, varname, signal) %#ok<INUSD,INUSL>
-         eval([varname '= obj.get_signal(signal);']);
-         save(filename, varname, '-v7.3', '-append')
-      end
    end
    %---------------------------------------------------- Private functions
    methods (Access=private)
