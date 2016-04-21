@@ -203,6 +203,14 @@ classdef EDFast < handle
          obj.SigMatObj.write(label, obj.get_signal(signal));
       end
       
+      function sidx = SigNos(obj)
+         sidx = 1:length(obj.SigLabels);
+      end
+      
+      function sps = SigHertz(obj)
+         sps = cell2mat({ obj.SignalHeader.samples_in_record } )/ obj.Header.data_record_duration;
+      end
+      
    end
    %---------------------------------------------------- Private functions
    methods (Access=private)
