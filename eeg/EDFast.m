@@ -192,7 +192,7 @@ classdef EDFast < handle
       end
             
       function SigMatSetup(obj, fn)
-         obj.SigMatObj = SigMat(fn, obj.RecStart, obj.RecEnd);
+         obj.SigMatObj = SigMat(fn, obj.RecStart, obj.SigHertz);
          obj.SigMatPath = obj.SigMatObj.Properties.Source;
       end
       
