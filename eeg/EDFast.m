@@ -4,6 +4,11 @@ classdef EDFast < handle
    % Create an EDFast object from an EDF file:
    % >> edf = EDFast('data.edf')
    %
+   % type the variable name at the command line to see the object's
+   % publicly visible properties:
+   %
+   % >> edf
+   %
    % Set verbosity to get information in the Command Window while
    % processing (default is false to reduce clutter)
    % >> edf.Verbose = true
@@ -16,6 +21,17 @@ classdef EDFast < handle
    % Retrieve the specified signal:
    % >> sig = edf.get_signal(2);
    %
+   % Inspired by Dennis A. Dean's blockEdfLoadClass
+   % http://www.mathworks.com/matlabcentral/fileexchange/45227-blockedfloadclass
+   % https://github.com/DennisDean/BlockEdfLoadClass
+   % Some of his code is still here.
+   %
+   % Here, the focus is to extract one signal at a time,
+   % especially for very large data files.
+   %
+   % GB: 28 Dec 2015
+   
+   % TO TRASH? MAYBE
    % If you don't need to use the signal right away, you can instead
    % directly save to a MAT file:
    % >> mat_file_name = 'exp01.mat';
@@ -29,17 +45,7 @@ classdef EDFast < handle
    % >>    edf.append_signal(mat_file_name, sig_labels{n}, n);
    % >> end
    %
-   % Inspired by Dennis A. Dean's blockEdfLoadClass
-   % http://www.mathworks.com/matlabcentral/fileexchange/45227-blockedfloadclass
-   % https://github.com/DennisDean/BlockEdfLoadClass
-   % Some of his code is still here.
-   %
-   % Here, the focus is to extract one signal at a time,
-   % especially for very large data files.
-   %
-   % GB: 28 Dec 2015
-   
-   
+
    %----------------------------------------------------------- Properties
    properties (Access = public)
       Verbose = false
@@ -48,10 +54,12 @@ classdef EDFast < handle
    
    properties (SetAccess = private)
       Filename
-      SigMatPath
+      % SigMatPath
       RecStart
       RecEnd
+      NSignals
       SigLabels
+      SigHertz
       Header = struct
       SignalHeader = struct(...
          'signal_labels', {}, ...
@@ -73,7 +81,7 @@ classdef EDFast < handle
       BlockBounds
       SSize
       SigMask
-      SigMatObj
+      % SigMatObj
    end
    
    properties (Constant, Access = private)
@@ -156,6 +164,8 @@ classdef EDFast < handle
          obj.RecEnd   = obj.RecStart + seconds(off);
          % set up signal labels
          obj.SigLabels = {obj.SignalHeader.signal_labels};
+         obj.NSignals = length(obj.SigLabels);
+         obj.SigHertz = cell2mat({ obj.SignalHeader.samples_in_record } )/ obj.Header.data_record_duration;
       end
       
       % Return an entire signal as a vector
@@ -191,25 +201,24 @@ classdef EDFast < handle
          end
       end
             
-      function SigMatSetup(obj, fn)
-         obj.SigMatObj = SigMat(fn, obj.RecStart, obj.SigHertz);
-         obj.SigMatPath = obj.SigMatObj.Properties.Source;
-      end
-      
-      function save_signal(obj, signal, label)
-         if nargin < 3
-            label = regexprep(obj.SigLabels{signal}, '\W', '_');
-         end
-         obj.SigMatObj.write(label, obj.get_signal(signal));
-      end
-      
-      function sidx = SigNos(obj)
-         sidx = 1:length(obj.SigLabels);
-      end
-      
-      function sps = SigHertz(obj)
-         sps = cell2mat({ obj.SignalHeader.samples_in_record } )/ obj.Header.data_record_duration;
-      end
+      %       function SigMatSetup(obj, fn)
+      %          obj.SigMatObj = SigMat(fn, obj.RecStart, obj.SigHertz);
+      %          obj.SigMatPath = obj.SigMatObj.Properties.Source;
+      %       end
+      %
+      %       function save_signal(obj, signal, label)
+      %          if nargin < 3
+      %             label = regexprep(obj.SigLabels{signal}, '\W', '_');
+      %          end
+      %          obj.SigMatObj.write(label, obj.get_signal(signal));
+      %       end
+      %
+      %       function sidx = SigNos(obj)
+      %          sidx = 1:length(obj.SigLabels);
+      %       end
+      %       function sps = SigHertz(obj)
+      %          sps = cell2mat({ obj.SignalHeader.samples_in_record } )/ obj.Header.data_record_duration;
+      %       end
       
    end
    %---------------------------------------------------- Private functions
