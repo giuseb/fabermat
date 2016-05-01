@@ -24,7 +24,7 @@ function edf2sigmat(edfname, subjects, channels, outdir)
    % instantiating the EDFast
    edf = EDFast(edfname);
    % save the string representation of the recording start datetime
-   ds = datestring(edf.RecStart, 'yyyy-mm-dd');
+   ds = datestr(edf.RecStart, 'yyyy-mm-dd');
    
    for s = subjects
       subj = s{:};
