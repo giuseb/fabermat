@@ -193,12 +193,16 @@ classdef EDFast < handle
          end
          fclose(fid);
          % convert to analog
-         dm = obj.SignalHeader(obj.ActiveSignal).digital_min;
-         dx = obj.SignalHeader(obj.ActiveSignal).digital_max;
-         rv = (double(A) - (dx+dm)/2) / (dx-dm);
-         if obj.SignalHeader(obj.ActiveSignal).physical_min > 0
-            rv = -rv;
-         end
+         th = obj.SignalHeader(obj.ActiveSignal);
+         scalefac = (th.physical_max - th.physical_min)/ ...
+                    (th.digital_max  - th.digital_min);
+         dc = th.physical_max - scalefac * th.digital_max;
+         rv = double(A) * scalefac + dc;
+         
+         %          rv = (double(A) - (dx+dm)/2) / (dx-dm);
+         %          if obj.SignalHeader(obj.ActiveSignal).physical_min > 0
+         %             rv = -rv;
+         %          end
       end
             
       %       function SigMatSetup(obj, fn)
