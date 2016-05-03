@@ -104,6 +104,7 @@ classdef EDFast < handle
          @str2num; @str2num; @strtrim; @str2num; @strtrim
          }
       sigHeadVarSize = [16 80 8 8 8 8 8 80 8 32]
+      uVconv = 1000000; % turning EDF's Volts into ?V
    end
    
    %------------------------------------------------------- Public Methods
@@ -182,7 +183,7 @@ classdef EDFast < handle
          scalefac = (th.physical_max - th.physical_min)/ ...
             (th.digital_max  - th.digital_min);
          dc = th.physical_max - scalefac * th.digital_max;
-         rv = double(A) * scalefac + dc;
+         rv = (double(A) * scalefac + dc) * obj.uVconv;
       end
    end
    %---------------------------------------------------- Private functions
