@@ -27,25 +27,10 @@ classdef EDFast < handle
    % Some of his code is still here.
    %
    % Here, the focus is to extract one signal at a time,
-   % especially for very large data files.
+   % especially useful for very large data files.
    %
-   % GB: 28 Dec 2015
-   
-   % TO TRASH? MAYBE
-   % If you don't need to use the signal right away, you can instead
-   % directly save to a MAT file:
-   % >> mat_file_name = 'exp01.mat';
-   % >> signal_label = 'eeg2';
-   % >> edf.save_signal(mat_file_name, signal_label, 2)
-   %
-   % To save multiple signals to the same MAT file, loop over the append
-   % function:
-   % >> sig_labels = {'EEG1', 'EMG1'};
-   % >> for n = 1:length(sig_labels)
-   % >>    edf.append_signal(mat_file_name, sig_labels{n}, n);
-   % >> end
-   %
-
+   % GB: 3 May 2016
+      
    %----------------------------------------------------------- Properties
    properties (Access = public)
       Verbose = false
@@ -53,14 +38,13 @@ classdef EDFast < handle
    end
    
    properties (SetAccess = private)
-      Filename
-      % SigMatPath
-      RecStart
-      RecEnd
-      NSignals
-      SigLabels
-      SigHertz
-      Header = struct
+      Filename         % source EDF file path/name
+      RecStart         % the recording start datetime
+      RecEnd           % the recording end datetime
+      NSignals         % the number of signals in the EDF
+      SigLabels        % the labels for each of the signals
+      SigHertz         % the sampling rate for each of the signals
+      Header = struct  % the entire header
       SignalHeader = struct(...
          'signal_labels', {}, ...
          'tranducer_type', {}, ...
@@ -138,7 +122,7 @@ classdef EDFast < handle
             conF = obj.headVarsConF{h};
             value = conF(char((A(hvl(h)+1:hvl(h+1)))'));
             obj.Header.(obj.headVars{h}) = value;
-         end         
+         end
          % Load Signal Header data
          ss = obj.Header.num_header_bytes - sum(obj.headVarSize);
          A = fread(fid, ss);
@@ -157,12 +141,12 @@ classdef EDFast < handle
          end
          fclose(fid);
          
-         % set up rec start and end
+         % set up rec start and end datetimes
          ds = [obj.Header.recording_startdate obj.Header.recording_starttime];
          off = obj.Header.num_data_records * obj.Header.data_record_duration;
          obj.RecStart = datetime(ds, 'Inputformat', 'dd.MM.yyHH.mm.ss');
          obj.RecEnd   = obj.RecStart + seconds(off);
-         % set up signal labels
+         % set up signal labels and Hz
          obj.SigLabels = {obj.SignalHeader.signal_labels};
          obj.NSignals = length(obj.SigLabels);
          obj.SigHertz = cell2mat({ obj.SignalHeader.samples_in_record } )/ obj.Header.data_record_duration;
@@ -192,43 +176,17 @@ classdef EDFast < handle
             end
          end
          fclose(fid);
-         % convert to analog
+         % convert to analog; this normalization adapted from edfread by
+         % Brett Shoelson
          th = obj.SignalHeader(obj.ActiveSignal);
          scalefac = (th.physical_max - th.physical_min)/ ...
-                    (th.digital_max  - th.digital_min);
+            (th.digital_max  - th.digital_min);
          dc = th.physical_max - scalefac * th.digital_max;
          rv = double(A) * scalefac + dc;
-         
-         %          rv = (double(A) - (dx+dm)/2) / (dx-dm);
-         %          if obj.SignalHeader(obj.ActiveSignal).physical_min > 0
-         %             rv = -rv;
-         %          end
       end
-            
-      %       function SigMatSetup(obj, fn)
-      %          obj.SigMatObj = SigMat(fn, obj.RecStart, obj.SigHertz);
-      %          obj.SigMatPath = obj.SigMatObj.Properties.Source;
-      %       end
-      %
-      %       function save_signal(obj, signal, label)
-      %          if nargin < 3
-      %             label = regexprep(obj.SigLabels{signal}, '\W', '_');
-      %          end
-      %          obj.SigMatObj.write(label, obj.get_signal(signal));
-      %       end
-      %
-      %       function sidx = SigNos(obj)
-      %          sidx = 1:length(obj.SigLabels);
-      %       end
-      %       function sps = SigHertz(obj)
-      %          sps = cell2mat({ obj.SignalHeader.samples_in_record } )/ obj.Header.data_record_duration;
-      %       end
-      
    end
    %---------------------------------------------------- Private functions
    methods (Access=private)
-      % Size   = in samples
-      % Range  = array used as index
       function setup_params(obj, signal)
          % Save argument to current Signal
          obj.ActiveSignal = signal;
@@ -250,10 +208,44 @@ classdef EDFast < handle
          % boundaries to get the block range
          obj.BlockBounds = [0:srsize*obj.RecordsPerBlock:obj.SSize, obj.SSize];
       end
-
+      
       % range for the current block
       function rv = BlockRange(obj, block)
          rv = (obj.BlockBounds(block)+1 : obj.BlockBounds(block+1))';
       end
    end
 end
+
+% TO TRASH? MAYBE
+% If you don't need to use the signal right away, you can instead
+% directly save to a MAT file:
+% >> mat_file_name = 'exp01.mat';
+% >> signal_label = 'eeg2';
+% >> edf.save_signal(mat_file_name, signal_label, 2)
+%
+% To save multiple signals to the same MAT file, loop over the append
+% function:
+% >> sig_labels = {'EEG1', 'EMG1'};
+% >> for n = 1:length(sig_labels)
+% >>    edf.append_signal(mat_file_name, sig_labels{n}, n);
+% >> end
+%
+%       function SigMatSetup(obj, fn)
+%          obj.SigMatObj = SigMat(fn, obj.RecStart, obj.SigHertz);
+%          obj.SigMatPath = obj.SigMatObj.Properties.Source;
+%       end
+%
+%       function save_signal(obj, signal, label)
+%          if nargin < 3
+%             label = regexprep(obj.SigLabels{signal}, '\W', '_');
+%          end
+%          obj.SigMatObj.write(label, obj.get_signal(signal));
+%       end
+%
+%       function sidx = SigNos(obj)
+%          sidx = 1:length(obj.SigLabels);
+%       end
+%       function sps = SigHertz(obj)
+%          sps = cell2mat({ obj.SignalHeader.samples_in_record } )/ obj.Header.data_record_duration;
+%       end
+
