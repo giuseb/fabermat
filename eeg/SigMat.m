@@ -186,7 +186,7 @@ classdef SigMat < handle
                end
                istart = seconds(dtstart-obj.RecStart) * obj.Hertz + 1;
                iend   = seconds(dtfin  -obj.RecStart) * obj.Hertz;
-               rv = obj.MatFileObj.(label)(istart:iend,1);
+               rv = obj.MatFileObj.(signal)(istart:iend,1);
             else
                error('Invalid number of arguments')
             end
