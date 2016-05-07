@@ -8,6 +8,8 @@ function rv = signalgen(seconds, sampling_rate, params)
    %     periodicity in Hertz, the second is the amplitude.
    %     With a single PARAMS row, the signal is a perfect sinusoid; the
    %     more rows are added, the noisier the signal.
+   %
+   % Last modified: 6 May 2016
    
    if ~isnumeric(params) || size(params,2) ~= 2
       error('PARAMS should be a two-column numerical matrix')
@@ -20,5 +22,5 @@ function rv = signalgen(seconds, sampling_rate, params)
    wave_hz   = repmat(params(:,1), 1, size(t,2));
    amplitude = repmat(params(:,2), 1, size(t,2));
    % computing the signal
-   rv = sum(amplitude .* sin(2*pi*wave_hz.*t));
+   rv = sum(amplitude .* sin(2*pi*wave_hz.*t), 1);
 end
