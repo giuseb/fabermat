@@ -1,33 +1,26 @@
 classdef EEpower < handle
-   %EEpower: power spectra for EEG signals
+   %EEpower: power density estimates for signals
    %
    % GB: 28 Dec 2015
    
    %----------------------------------------------------------- Properties
    properties (SetAccess = private)
-      % default signal sampling rate
-      Hz =   500
-      % default scoring epoch in seconds
-      Epoch = 10
-      % kernel size in seconds
-      Ksize =  2
-      % min and max plotted frequency
-      HzMin =  0
-      HzMax = 30
-      % the number of epochs in the data file
-      NumEpochs
-      % the EEG signal
-      EEG
-      % maximum power
-      MaxPwr
-      % minimum power
-      MinPwr
-      % maximum log power
-      MaxLogPwr
-      % minimum log power
-      MinLogPwr
+      EEG       % the actual EEG signal
+      SRate     % signal sampling rate
    end
-   
+   properties (SetObservable)
+      Epoch     % scoring epoch in seconds (default is 10)      
+      Ksize     % kernel size in seconds (default is 2)
+      HzMin     % minimum plotted frequency (default is 0)
+      HzMax     % maximum plotted frequency (default is 30)
+   end
+   properties (SetAccess = private)
+      NumEpochs % the number of epochs in the data file
+      MaxPwr    % maximum power computed over the entire signal
+      MinPwr    % minimum power computed over the entire signal
+      MaxLogPwr % maximum log power computed over the entire signal
+      MinLogPwr % minimum log power computed over the entire signal
+   end
    properties (Access = private)
       spe    % the number of samples in a single epoch
       spk    % the number of samples in a single kernel
@@ -40,11 +33,26 @@ classdef EEpower < handle
    %------------------------------------------------------- Public Methods
    methods
       %------------------------------------------------------- Constructor
-      function obj = EEpower(eeg)
-         % store EEG
-         obj.EEG = eeg;
+      function obj = EEpower(eeg, SRate, varargin)
+         p = inputParser;
+         p.addRequired( 'EEG',       @isnumvector)
+         p.addRequired( 'SRate',     @isnumscalar)
+         p.addParameter('Epoch', 10, @isnumscalar)
+         p.addParameter('Ksize',  2, @isnumscalar)
+         p.addParameter('HzMin',  0, @isnumscalar)
+         p.addParameter('HzMax', 30, @isnumscalar)
+         p.parse(eeg, SRate, varargin{:})
+         
+         obj.EEG   = p.Results.EEG;
+         obj.SRate = p.Results.SRate;
+         obj.Epoch = p.Results.Epoch;
+         obj.Ksize = p.Results.Ksize;
+         obj.HzMin = p.Results.HzMin;
+         obj.HzMax = p.Results.HzMax;
+         
+         lprops = { 'Epoch' 'Ksize' 'HzMin' 'HzMax' };
+         obj.addlistener(lprops, 'PostSet', @obj.HandleProps);
          obj.update_parameters
-         obj.dirty = true;
       end
       %------------------------------------------------ Return raw spectra
       function rv = spectra(obj, epochs)
@@ -73,41 +81,17 @@ classdef EEpower < handle
          axis xy
          colormap(jet(256))
       end
-      
-      %---------------------------------------------------- Setter methods
-      % update parameters whenever a property changes
-      % could this be refactored to an event/listener mechanism?
-      function setHz(obj, value)
-         obj.Hz = value;
-         obj.dirty = true;
-      end
-      
-      function setEpoch(obj, value)
-         obj.Epoch = value;
-         obj.dirty = true;
-      end
-      
-      function setKsize(obj, value)
-         obj.Ksize = value;
-         obj.dirty = true;
-      end
-      
-      function setHzMin(obj, value)
-         obj.HzMin = value;
-         obj.dirty = true;
-      end
-      
-      function setHzMax(obj, value)
-         obj.HzMax = value;
-         obj.dirty = true;
-      end
    end
    
+   methods (Static)
+      function HandleProps(~, event)
+         event.AffectedObject.update_parameters
+      end
+   end
    %------------------------------------------------------ Private methods
    methods (Access=private)
       %------------------------------------------------- Calculate spectra
       function setPxx(obj)
-         obj.update_parameters
          % preallocate memory for the spectrogram
          obj.pxx = zeros(length(obj.freqs), obj.NumEpochs);
          % generate the Hanning kernel
@@ -118,25 +102,26 @@ classdef EEpower < handle
             idx = (ep-1) * obj.spe+1 : ep * obj.spe;
             data = obj.EEG(idx);
             % compute the spectra
-            obj.pxx(:,ep) = pwelch(data, ha, 0, obj.spk, obj.Hz);
+            obj.pxx(:,ep) = pwelch(data, ha, [], obj.spk, obj.SRate);
          end
          t = obj.pxx(obj.hz_rng, :);
          obj.MaxPwr = max(t(:));
          obj.MinPwr = min(t(:));
+         obj.dirty = false;
       end
             
       function update_parameters(obj)
-         % the object will soon be clean
-         obj.dirty = false;
+         % spectra will have to be recomputed after this
+         obj.dirty = true;
          % the number of samples in a single kernel
-         obj.spk       = obj.Ksize * obj.Hz;
+         obj.spk       = obj.Ksize * obj.SRate;
          % the number of samples in a single epoch
-         obj.spe       = obj.Epoch * obj.Hz;
+         obj.spe       = obj.Epoch * obj.SRate;
          % the number of available epochs in the data file
          obj.NumEpochs = floor(length(obj.EEG)/obj.spe);
          % frequency range; resolution is the inverse of kernel size;
          % maximum frequency is always half of the sampling rate
-         obj.freqs     = 0:(1/obj.Ksize):obj.Hz/2;
+         obj.freqs     = 0:(1/obj.Ksize):obj.SRate/2;
          % frequency range for plotting purposes; very high frequencies
          % are often useless
          obj.hz_rng = find(obj.freqs >= obj.HzMin & obj.freqs < obj.HzMax);

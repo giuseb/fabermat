@@ -58,7 +58,9 @@ classdef ERPool < handle
       rs_samples % number of samples during response
    end
    
+   %------------------------------------------------------- Public Methods
    methods
+      %------------------------------------------------------- Constructor
       function obj = ERPool(eeg, event_times, event_codes, varargin)
          p = inputParser;
          p.addRequired('EEG',   @isnumvector)

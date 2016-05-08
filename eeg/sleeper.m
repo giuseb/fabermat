@@ -135,12 +135,11 @@ function sleeper_OpeningFcn(hObject, ~, h, eeg, varargin)
    h.lblSegNum.String = sprintf('of %d', h.num_segments);
    h.actiPlot.XTickLabel = '';
    %---------------------------------------------- Setting up the spectrogram
-   h.pow = EEpower(h.eeg);
-   h.pow.setHz(h.sampling_rate);
-   h.pow.setEpoch(h.scoring_epoch);
-   h.pow.setKsize(h.kernel_len);
-   h.pow.setHzMin(h.hz_min);
-   h.pow.setHzMax(h.hz_max);
+   h.pow = EEpower(h.eeg, h.sampling_rate, ...
+      'Epoch', h.scoring_epoch, ...
+      'Ksize', h.kernel_len, ...
+      'HzMin', h.hz_min, ...
+      'HzMax', h.hz_max);
 
    h.spectrarrow = 0;
 
