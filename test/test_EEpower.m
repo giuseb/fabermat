@@ -1,15 +1,13 @@
 %% testing the EEpower class, for the analysis of power spectra in EEG
-clear
-load EEpower_sample
-e = EEpower(eeg,500)  %#ok<NOPTS>
-e.setEpoch(10);
-e.setKsize(1);
-e.setHzMin(0);
-e.setHzMax(30);
+es = load('test_EEpower');
+eep = EEpower(es.eeg,500)  %#ok<NOPTS>
+assert(isequal(eep.NumEpochs, 360))
+assert(isequal(eep.SRate, 500))
+assert(isequal(eep.Ksize, 2))
+assert(isequal(eep.HzMin, 0))
+assert(isequal(eep.HzMax, 30))
+assert(isequal(eep.spectra, es.spectra))
 
-% s = e.spectra;
-p = e.power_density_curve(102);
-% e.spectrogram
 
 %%
 clear
@@ -22,7 +20,7 @@ pars = [
 s1 = signalgen(60, 1000, pars);
 plot(s1(1:1000))
 
-e = EEpower(s1,500);
+eep = EEpower(s1,500);
 % e.setHz(1000);
 % e.setEpoch(60);
 % e.setHz(500);
@@ -31,9 +29,5 @@ e = EEpower(s1,500);
 % e.setHzMin(0);
 % e.setHzMax(30);
 
-x = e.spectra;
+x = eep.spectra;
 plot(x)
-
-%%
-
-f = fft(s1, 30)
