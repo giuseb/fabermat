@@ -9,25 +9,18 @@ assert(isequal(eep.HzMax, 30))
 assert(isequal(eep.spectra, es.spectra))
 
 
-%%
-clear
+%% quickly test a made-up signal
 pars = [
    10, 4;
    16, 3;
    50, 1;
    235, .5
    ];
-s1 = signalgen(60, 1000, pars);
+
+s1 = signalgen(60, 500, pars, 20);
+subplot(1,2,1)
 plot(s1(1:1000))
-
 eep = EEpower(s1,500);
-% e.setHz(1000);
-% e.setEpoch(60);
-% e.setHz(500);
-% e.setEpoch(10);
-% e.setKsize(2);
-% e.setHzMin(0);
-% e.setHzMax(30);
-
-x = eep.spectra;
-plot(x)
+x = eep.spectra(1);
+subplot(1,2,2)
+plot(eep.HzRange, x)
