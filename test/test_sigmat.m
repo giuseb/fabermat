@@ -15,9 +15,9 @@ assert(sm.RecStart==datetime('2016-04-25 11:23:10'))
 assert(sm.NSignals==0)
 
 % generating and writing fake signals
-s1 = signalgen(3600, 500, 8, 23);
+s1 = signalgen(3600, 500, [8, 10], 23);
 sm.write('ts1', 500, s1)
-s2 = signalgen(3600, 400, 9, 21);
+s2 = signalgen(3600, 400, [8, 10], 21);
 sm.write('ts2', 400, s2)
 
 % test readout
@@ -25,6 +25,10 @@ tmp = sm.read(1);
 assert(isequal(tmp, s1));
 tmp = sm.read(2);
 assert(isequal(tmp, s2));
+
+% test variable size
+assert(isequal(sm.size('ts1'), size(s1)))
+assert(isequal(sm.size('ts2'), size(s2)))
 
 % test loading variables
 x = load(tmpFile);

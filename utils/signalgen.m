@@ -11,7 +11,7 @@ function rv = signalgen(seconds, sampling_rate, params, noise)
    %     White noise of NOISE amplitude is added, if the argument is
    %     provided.
    %
-   % Last modified: 6 May 2016
+   % Last modified: 13 May 2016
    
    if ~isnumeric(params) || size(params,2) ~= 2
       error('PARAMS should be a two-column numerical matrix')

@@ -148,6 +148,29 @@ classdef SigMat < handle
          obj.MatFileObj.(label) = signal;
       end
       
+      function rv = size(obj, signal)
+         
+         % TODO: refactor this with identical code in READ
+         if nargin < 2
+            error('Too few arguments; SIGNAL is mandatory')
+         else
+            if isintscalar(signal)
+               if signal > obj.NSignals || signal < 1
+                  error('Invalid signal number')
+               else                  
+                  signal = obj.SigLabels{signal};
+               end
+            elseif ishstring(signal)
+               if ~find(strcmp(obj.SigLabels, signal), 1)
+                  error('Signal label not found')
+               end
+            else
+               error('Invalid argument type; SIGNAL should be an integer or a string')
+            end
+         end
+         rv = size(obj.MatFileObj, signal);
+      end
+      
       function rv = read(obj, signal, start, finish)
          % READ reading a signal
          %
