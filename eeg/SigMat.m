@@ -148,7 +148,7 @@ classdef SigMat < handle
          obj.MatFileObj.(label) = signal;
       end
       
-      function rv = size(obj, signal)
+      function rv = length(obj, signal)
          
          % TODO: refactor this with identical code in READ
          if nargin < 2
@@ -168,7 +168,7 @@ classdef SigMat < handle
                error('Invalid argument type; SIGNAL should be an integer or a string')
             end
          end
-         rv = size(obj.MatFileObj, signal);
+         rv = max(size(obj.MatFileObj, signal));
       end
       
       function rv = read(obj, signal, start, finish)

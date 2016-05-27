@@ -27,8 +27,8 @@ tmp = sm.read(2);
 assert(isequal(tmp, s2));
 
 % test variable size
-assert(isequal(sm.size('ts1'), size(s1)))
-assert(isequal(sm.size('ts2'), size(s2)))
+assert(isequal(sm.length('ts1'), length(s1)))
+assert(isequal(sm.length('ts2'), length(s2)))
 
 % test loading variables
 x = load(tmpFile);
