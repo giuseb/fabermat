@@ -9,7 +9,7 @@ function varargout = sleeper(varargin)
    %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
    %      in EEG
 
-   % Last Modified by GUIDE v2.5 20-Jan-2016 15:20:56
+   % Last Modified by GUIDE v2.5 31-May-2016 13:04:08
 
    % Begin initialization code - DO NOT EDIT
    gui_Singleton = 1;
@@ -825,4 +825,3 @@ function h = update_parameters(h)
    % the width (in samples) of the spectrogram/hypnogram charts
    h.segment_size = h.sampling_rate * h.segment_len;
 end
-
