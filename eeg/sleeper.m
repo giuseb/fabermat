@@ -9,7 +9,7 @@ function varargout = sleeper(varargin)
    %      SLEEPER(EEG) opens the sleeper GUI to display and score the signal
    %      in EEG
 
-   % Last Modified by GUIDE v2.5 31-May-2016 13:04:08
+   % Last Modified by GUIDE v2.5 01-Jun-2016 14:55:16
 
    % Begin initialization code - DO NOT EDIT
    gui_Singleton = 1;
@@ -83,13 +83,14 @@ function sleeper_OpeningFcn(hObject, ~, h, eeg, varargin)
    end
 
    %------------------------------------------------------------------- States
-   h.k.NORMAL      = 0; % the "normal" state
-   h.k.MARKING      = 1; % waiting for the end mark
-   h.k.THRESHOLDING = 2;
-   h.k.ZOOM     = 3;
-   h.k.ZOOMING      = 4;
-   h.k.ZOOMED       = 5;
-   h.k.ZOOMARKING   = 6;
+   h.k.NORMAL       = 0; % the "normal" state
+   h.k.MARK         = 1;
+   h.k.MARKING      = 2; % waiting for the end mark
+   h.k.THRESHOLDING = 3;
+   h.k.ZOOM         = 4;
+   h.k.ZOOMING      = 5;
+   h.k.ZOOMED       = 6;
+   h.k.ZOOMARKING   = 7;
    h.gui_state = h.k.NORMAL;
    %-------------------------------------------------------------> Various
    h.zoom_start = 0;
@@ -170,6 +171,8 @@ end
 function eegPlot_ButtonDownFcn(hObject, eventdata, h) %#ok<DEFNU>
    switch h.gui_state
       case h.k.NORMAL
+         beep
+      case h.k.MARKING
          if h.marking
             h = finish_normal_marker(h, eventdata);
          else
@@ -197,7 +200,7 @@ end
 %=========================================================================
 %============================================================== Keypresses
 %=========================================================================
-function window_KeyPressFcn(hObject, key, h) %#ok<DEFNU>
+function window_WindowKeyPressFcn(hObject, key, h) %#ok<DEFNU>
 
    switch key.Key
       case 'rightarrow'
@@ -228,6 +231,8 @@ function window_KeyPressFcn(hObject, key, h) %#ok<DEFNU>
          h = toggle_zoom(h);
       case 'x'
          h = delete_current_marker(h);
+      case 'm'
+         h = toggle_mark(h);
    end
    guidata(hObject, h)
 end
@@ -260,21 +265,35 @@ function btnSave_Callback(hObject, ~, h) %#ok<DEFNU>
    hObject.BackgroundColor = 'white';
    h.txtHypnoFName.String = t;
 end
-%---------------------------------------------- Setting an event threshold
+%---------------------------------------------> Setting an event threshold
 function btnSetEEGThr_Callback(hObject, ~, h) %#ok<DEFNU>
    highlight_eeg(h, 'thres')
    h.gui_state = h.k.THRESHOLDING;
    guidata(hObject, h)
 end
-
-%----------------------------------------------------- Abort marking event
-function btnCancelMarker_Callback(hObject, ~, h) %#ok<DEFNU>
-   hObject.Visible = 'off';
-   h = del_event_patches(h);
-   guidata(hObject, h)
+% -----------------------------------------------------> Show Markers list
+function btnMarkerList_Callback(~, ~, h) %#ok<DEFNU>
+   if h.marking || h.cm==0
+      return
+   end
+   for n = 1:h.cm
+      m = h.markers(n);
+      [seg, epo] = parsed_eeg_position(h, m.start_pos);
+      ts{n} = sprintf('S%d-E%d: %s', seg, epo, m.tag); %#ok<AGROW>
+   end
+   [item, ok] = listdlg( ...
+      'ListString', ts, ...
+      'SelectionMode', 'single', ...
+      'Name', 'Marker list');
+   if ok
+      mrk = h.markers(item);
+      [seg, epo] = parsed_eeg_position(h, mrk.start_pos);
+      h.currEpoch.String = epo;
+      h.currSeg.String = seg;
+      draw_epoch(h);
+   end
 end
-
-%-------------------------------------------------- Modifying signal YLims
+%-------------------------------------------------> Modifying signal YLims
 function moreEEGpeak_Callback(~, ~, h) %#ok<DEFNU>
    set_ylim(h, .9, 1)
 end
@@ -296,19 +315,6 @@ function set_ylim(h, deeg, demg)
    h.emgPlot.YLim = [-p p];
    h.emg_peak = p;
    guidata(h.window, h);
-end
-%------------------------------------------------> Deleting current marker
-function btnDelMarker_Callback(~, ~, h) %#ok<DEFNU>
-   x = questdlg('Delete this marker?', 'EEG Markers', 'No', 'Yes', 'Yes');
-   switch x
-      case 'No'
-      case 'Yes'
-         mrk = h.sldMarkers.Value;
-         h.markers(mrk) = [];
-         h.cm = h.cm-1;
-         guidata(h.window, h)
-         set_marker_info(h, min(mrk, h.cm));
-   end
 end
 %----------------------------------------------> Manually setting EEG YLim
 function btnEEGuV_Callback(hObject, ~, h) %#ok<DEFNU>
@@ -396,11 +402,6 @@ function sldEvents_Callback(hObject, ~, h)
    h = jump_to(h, floor(h.watch_epochs(v)/epInSeg)+1, rem(h.watch_epochs(v), epInSeg)+1);
    guidata(hObject, h)
 end
-%-------------------------------------- Browsing markers through the slider
-function sldMarkers_Callback(hObject, ~, h) %#ok<DEFNU>
-   uisnapslider(hObject);
-   set_marker_info(h);
-end
 %=========================================================================
 %================================================================ BROWSING
 %=========================================================================
@@ -415,61 +416,33 @@ function h = jump_to(h, seg, epo)
 end
 %-------------------------------------------------------> Go to next epoch
 function h = next_epoch(h)
-   if h.gui_state == h.k.NORMAL
-      e = uivalue(h.currEpoch) + 1;
-      s = uivalue(h.currSeg);
-      if e > h.epochs_in_seg && s < h.num_segments
-         h.currEpoch.String = 1;
-         h.currSeg.String = s+1;
-         draw_spectra(h)
-      else
-         h.currEpoch.String = min(e, h.epochs_in_seg);
-      end
+   %    if h.gui_state == h.k.NORMAL
+   e = uivalue(h.currEpoch) + 1;
+   s = uivalue(h.currSeg);
+   if e > h.epochs_in_seg && s < h.num_segments
+      h.currEpoch.String = 1;
+      h.currSeg.String = s+1;
+      draw_spectra(h)
+   else
+      h.currEpoch.String = min(e, h.epochs_in_seg);
    end
+   % end
    h = draw_epoch(h);
 end
 %---------------------------------------------------> Go to previous epoch
 function h = prev_epoch(h)
-   if h.gui_state == h.k.NORMAL
-      e = uivalue(h.currEpoch) - 1;
-      s = uivalue(h.currSeg);
-      if e < 1 && s > 1
-         h.currEpoch.String = h.epochs_in_seg;
-         h.currSeg.String = s-1;
-         draw_spectra(h)
-      else
-         h.currEpoch.String = max(uivalue(h.currEpoch)-1, 1);
-      end
-   end
-   h = draw_epoch(h);
-end
-%--------------------------------------------------------> Set marker info
-function h = set_marker_info(h, mno)
-
-   if h.cm == 0
-      h.txtMarkerTag.String = '';
-      h.sldMarkers.Enable = 'off';
-      h.lblMarkers.String = 'no markers';
-      % h = draw_eeg(h, uivalue(h.currSeg), uivalue(h.currEpoch));
+   %    if h.gui_state == h.k.NORMAL
+   e = uivalue(h.currEpoch) - 1;
+   s = uivalue(h.currSeg);
+   if e < 1 && s > 1
+      h.currEpoch.String = h.epochs_in_seg;
+      h.currSeg.String = s-1;
+      draw_spectra(h)
    else
-      if h.cm==1 % disable the slider
-         mno = 1;
-         h.sldMarkers.Value = 1;
-         h.sldMarkers.Enable = 'off';
-      else
-         if nargin < 2, mno = h.sldMarkers.Value; end
-         h.sldMarkers.Enable     = 'on';
-         h.sldMarkers.Max        = h.cm;
-         h.sldMarkers.Value      = mno;
-         h.sldMarkers.SliderStep = [1/(h.cm-1), 10/(h.cm-1)];
-      end
-      mrk = h.markers(mno);
-      [seg, epo] = parsed_eeg_position(h, mrk.start_pos);
-      h = jump_to(h, seg, epo);
-      h.txtMarkerTag.String = mrk.tag;
-      h.lblMarkers.String = sprintf('%d of %d', mno, h.cm);
-      highlight_marker(h, mno)
+      h.currEpoch.String = max(uivalue(h.currEpoch)-1, 1);
    end
+   % end
+   h = draw_epoch(h);
 end
 %=========================================================================
 %========================================================== DRAWING THINGS
@@ -489,8 +462,8 @@ function draw_spectra(h)
 end
 %------------------------------------------------------> Draw epoch charts
 function h = draw_epoch(h)
-   h.gui_state = h.k.NORMAL;
-   highlight_eeg(h, 'normal')
+   %    h.gui_state = h.k.NORMAL;
+   %    highlight_eeg(h, 'normal')
 
    seg = uivalue(h.currSeg);
    epo = uivalue(h.currEpoch);
@@ -508,12 +481,13 @@ function h = draw_eeg(h, seg, epo)
    plot(sig, 'k', 'hittest', 'off')
    h.eegPlot.YLim = [-h.eeg_peak h.eeg_peak];
    h.eegPlot.XLim = [0 length(sig)];
+   h.eegPlot.XTickLabel = '';
 
    % if this epoch contains event markers, draw them
    if h.cm
       [segs, epos, poss] = parsed_eeg_position(h, [h.markers.finish_pos]);
       for ev = find(and(segs==seg, epos==epo))
-         h.patches(ev).finish = draw_marker_finish(h, poss(ev), ev);
+         h.patches(ev).finish = draw_marker_finish(h, poss(ev), ev, h.markers(ev).tag);
       end
       [segs, epos, poss] = parsed_eeg_position(h, [h.markers.start_pos]);
       for ev = find(and(segs==seg, epos==epo))
@@ -525,7 +499,6 @@ function h = draw_eeg(h, seg, epo)
       axes(h.emgPlot)
       plot(emg_for(h, seg, epo), 'k', 'hittest', 'off');
       h.emgPlot.YLim = [-h.emg_peak h.emg_peak];
-      h.emgPlot.XTickLabel = '';
    end
 
    sp = 0:h.scoring_epoch;
@@ -533,7 +506,7 @@ function h = draw_eeg(h, seg, epo)
       'ticklength', [.007 .007], ...
       'xlim', [0 length(sig)], ...
       'xtick', sp*h.sampling_rate)
-   h.eegPlot.XTickLabel = sp;
+   h.emgPlot.XTickLabel = sp;
 end
 %-----------------------------------------------------> Draw zoomed epoch
 function draw_zoomed_epoch(h)
@@ -589,11 +562,13 @@ function rv = draw_marker_start(h, x, mkr)
       'PickableParts','all');
 end
 %----------------------------------------------------> Draw the marker end
-function rv = draw_marker_finish(h, x, mkr)
+function rv = draw_marker_finish(h, x, mkr, tag)
    [cx, cy, c] = draw_marker_util(h, x, -1);
-   rv = patch(cx, cy, c, 'linestyle', 'none', ...
+   rv = patch(cx, cy, c, ...
+      'linestyle', 'none', ...
       'ButtonDownFcn',{@modify_event, mkr, h}, ...
       'PickableParts','all');
+   text(cx(1)+30, cy(2)*0.75, tag, 'EdgeColor', [0.333 0.4 1])
 end
 %----------------------------------------------------> Hackish marker util
 function [cx, cy, c] = draw_marker_util(h, x, sig)
@@ -652,6 +627,8 @@ function h = toggle_zoom(h)
       case h.k.NORMAL
          h.gui_state = h.k.ZOOM;
          highlight_eeg(h, 'zoom')
+      case h.k.MARKING
+         % TODO manage zooming while marking!
       otherwise
          beep
          return
@@ -667,6 +644,11 @@ end
 
 function h = set_zoom_end(h, eventdata)
    x = x_btn_pos(eventdata);
+   ze = global_eeg_position(h, x);
+   if ze < h.zoom_start
+      beep
+      return
+   end
    h.zoom_end = global_eeg_position(h, x);
    draw_zoomed_epoch(h)
    h.gui_state = h.k.ZOOMED;
@@ -675,6 +657,30 @@ end
 %=========================================================================
 %================================================================= MARKERS
 %=========================================================================
+function h = toggle_mark(h)
+   switch h.gui_state
+      case { h.k.NORMAL, h.k.ZOOMED }
+         h = set_mark_on(h);
+      case { h.k.MARKING }
+         if h.marking, h = delete_marker(h); end
+         h = set_mark_off(h);
+      otherwise
+         beep
+   end
+end
+
+function h = set_mark_on(h)
+   h.gui_state = h.k.MARKING;
+   highlight_eeg(h, 'mark');
+end
+
+function h = set_mark_off(h)
+   h.gui_state = h.k.NORMAL;
+   h.marking = false;
+   highlight_eeg(h, 'normal');
+end
+
+
 function h = start_normal_marker(h, eventdata)
    x = x_btn_pos(eventdata);
    h = start_marker(h, global_eeg_position(h, x), x);
@@ -690,7 +696,6 @@ function h = start_marker(h, absx, relx)
    h.markers(h.cm).start_pos = absx;
    h.patches(h.cm).start = draw_marker_start(h, relx, h.cm);
    h.marking = true;
-   h.btnCancelMarker.Visible = 'on';
 end
 
 function h = finish_normal_marker(h, eventdata)
@@ -707,7 +712,6 @@ end
 
 function h = finish_marker(h, absx, relx)
    if absx <= h.markers(h.cm).start_pos, beep; return; end
-   h.patches(h.cm).finish = draw_marker_finish(h, relx, h.cm);
    h.btnCancelMarker.Visible = 'off';
    s = inputdlg('Assign tag to event or cancel', 'Tagging events', 1, {h.default_event_tag});
    if isempty(s) % never mind... ignore this marker
@@ -717,9 +721,10 @@ function h = finish_marker(h, absx, relx)
       h.markers(h.cm).finish_pos = absx;
       h.markers(h.cm).tag = s{1};
       h.default_event_tag = s{1};
-      h = set_marker_info(h, h.cm);
+      h.patches(h.cm).finish = draw_marker_finish(h, relx, h.cm, s{1});
+      %       h = set_marker_info(h, h.cm);
    end
-   h.marking = false;
+   h = set_mark_off(h);
    h = draw_epoch(h);
 end
 %=========================================================================
@@ -735,14 +740,9 @@ function highlight_eeg(h, style)
          h.eegPlot.Color = 'white';
       case 'thres'
          h.eegPlot.Color = 'yellow';
+      case 'mark'
+         h.eegPlot.Color = [.95 .95 1];
    end
-end
-
-function highlight_marker(h, mrk)
-   m = h.patches(mrk);
-   p = m.start;
-   if ishandle(m.finish), p = [p m.finish]; end
-   set(p, 'facecolor', [1 0.5 0])
 end
 
 function set_event_thr_label(h, curr)
@@ -759,15 +759,13 @@ function rv = epN(h, seg)
    rv = min(seg * h.epochs_in_seg, h.tot_epochs);
 end
 
-function h = del_event_patches(h, ev)
+function h = delete_marker(h, ev)
    if nargin<2, ev = h.cm; end
-   delete(h.markers(ev).start_patch)
-   if nargin>1
-      delete(h.markers(ev).finish_patch)
-   end
    h.markers(ev) = [];
    h.cm = h.cm-1;
    h.gui_state = h.k.NORMAL;
+   h.marking = false;
+   h = draw_eeg(h, uivalue(h.currSeg), uivalue(h.currEpoch));
 end
 
 %--------------------------------------------------------------------> eeg_for
@@ -814,7 +812,13 @@ function rv = mrkstr
 end
 
 function modify_event(~, ~, ev, h)
-   set_marker_info(h, ev);
+   choice = questdlg('Delete this marker?', ...
+      'Marker management', 'Yes', 'No', 'No');
+   switch choice
+      case 'Yes'
+         h = delete_marker(h, ev);
+         guidata(h.window, h);
+   end
 end
 %----------------------------------------------------------> Update params
 function h = update_parameters(h)
@@ -825,3 +829,68 @@ function h = update_parameters(h)
    % the width (in samples) of the spectrogram/hypnogram charts
    h.segment_size = h.sampling_rate * h.segment_len;
 end
+
+
+
+%--------------------------------------------------------> Set marker info
+% function h = set_marker_info(h, mno)
+% 
+%    if h.cm == 0
+%       h.txtMarkerTag.String = '';
+%       h.sldMarkers.Enable = 'off';
+%       h.lblMarkers.String = 'no markers';
+%       % h = draw_eeg(h, uivalue(h.currSeg), uivalue(h.currEpoch));
+%    else
+%       if h.cm==1 % disable the slider
+%          mno = 1;
+%          h.sldMarkers.Value = 1;
+%          h.sldMarkers.Enable = 'off';
+%       else
+%          if nargin < 2, mno = h.sldMarkers.Value; end
+%          h.sldMarkers.Enable     = 'on';
+%          h.sldMarkers.Max        = h.cm;
+%          h.sldMarkers.Value      = mno;
+%          h.sldMarkers.SliderStep = [1/(h.cm-1), 10/(h.cm-1)];
+%       end
+%       mrk = h.markers(mno);
+%       [seg, epo] = parsed_eeg_position(h, mrk.start_pos);
+%       h = jump_to(h, seg, epo);
+%       h.txtMarkerTag.String = mrk.tag;
+%       h.lblMarkers.String = sprintf('%d of %d', mno, h.cm);
+%       highlight_marker(h, mno)
+%    end
+% end
+
+%------------------------------------------------> Deleting current marker
+% function btnDelMarker_Callback(~, ~, h) %#ok<DEFNU>
+%    x = questdlg('Delete this marker?', 'EEG Markers', 'No', 'Yes', 'Yes');
+%    switch x
+%       case 'No'
+%       case 'Yes'
+%          mrk = h.sldMarkers.Value;
+%          h.markers(mrk) = [];
+%          h.cm = h.cm-1;
+%          guidata(h.window, h)
+%          set_marker_info(h, min(mrk, h.cm));
+%    end
+% end
+
+% function highlight_marker(h, mrk)
+%    m = h.patches(mrk);
+%    p = m.start;
+%    if ishandle(m.finish), p = [p m.finish]; end
+%    set(p, 'facecolor', [1 0.5 0])
+% end
+
+%-------------------------------------- Browsing markers through the slider
+% function sldMarkers_Callback(hObject, ~, h) %#ok<DEFNU>
+%    uisnapslider(hObject);
+%    set_marker_info(h);
+% end
+
+%----------------------------------------------------> Abort marking event
+% function btnCancelMarker_Callback(hObject, ~, h) %#ok<DEFNU>
+%    hObject.Visible = 'off';
+%    h = delete_marker(h);
+%    guidata(hObject, h)
+% end
