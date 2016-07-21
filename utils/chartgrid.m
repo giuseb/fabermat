@@ -1,4 +1,4 @@
-function [fig, sub] = chartgrid (down, across, dist)
+function [fig, sub] = chartgrid(down, across, dist)
 
 % chartgrid.m    places empty subplots on the current figure
 %
@@ -23,8 +23,8 @@ function [fig, sub] = chartgrid (down, across, dist)
 %    - distance from bottom margin of figure
 %    - width of subplot
 %    - height of subplot
-% 
-% Last modified: 25 Jun 15
+%
+% Last modified: 22 Jun 16
 
 % last major changes: 17 apr 99
 % 22 apr 01: default DIST added
@@ -33,61 +33,61 @@ function [fig, sub] = chartgrid (down, across, dist)
 % 19 sep 03: use current figure if available
 %  4 Sep 06: numel replaces prod(size())
 % 25 Jun 15: replace scatter with scatplot to prevent naming confusions
+% 22 Jun 16: cosmetics
 
 fig = gcf;
-uni = get (fig, 'units');
-set (fig, 'units', 'normalized');
+uni = get(fig, 'units');
+set(fig, 'units', 'normalized');
 
 switch nargin
    case 1
-      sub = scatplot (down);
+      sub = scatplot(down);
    case 2
-      sub = grid (down, across, [.1 .1 .85 .8 .05 .05]);
+      sub = grid(down, across, [.1 .1 .85 .8 .05 .05]);
    case 3
-      sub = grid (down, across, dist);
+      sub = grid(down, across, dist);
    otherwise
       error ('wrong number of arguments')
 end
-set (fig, 'units', uni);
+set(fig, 'units', uni);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function sub = scatplot (positions)
+function sub = scatplot(positions)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-[numofch, position] = size (positions);
+[numofch, position] = size(positions);
 if position ~= 4
-   error ('POSITIONS argument must be a 4-column matrix');
+   error('POSITIONS argument must be a 4-column matrix');
 end
 
 for i = 1:numofch
-   sub(i) = axes('position', positions (i,:));
+   sub(i) = axes('position', positions(i,:)); %#ok<AGROW>
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function sub = grid (down, across, dist)
+function sub = grid(down, across, dist)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 if numel(dist) ~= 6
-   error ('DIST must be a six-element vector');
+   error('DIST must be a six-element vector');
 end
 
-left = dist (1);
-bottom = dist (2);
-width = dist (3);
-height = dist (4);
-interX = dist (5);
-interY = dist (6);
+left   = dist(1);
+bottom = dist(2);
+width  = dist(3);
+height = dist(4);
+interX = dist(5);
+interY = dist(6);
 
-plotwidth = (width - interX * (across-1)) / across;
+plotwidth  = (width - interX * (across-1)) / across;
 plotheight = (height - interY * (down-1)) / down;
 
 n=0;
 for i=down:-1:1
    for j=1:across
       n=n+1;
-      sub(n) = axes ('position', [...
+      sub(n) = axes('position', [...
             left+(plotwidth+interX)*(j-1),...
-            bottom+(plotheight+interY)*(i-1),...   
+            bottom+(plotheight+interY)*(i-1),...
             plotwidth,...
             plotheight]...
          );

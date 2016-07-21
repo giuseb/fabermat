@@ -229,8 +229,6 @@ function window_WindowKeyPressFcn(hObject, key, h) %#ok<DEFNU>
          h = set_state(h, nan);
       case 'z'
          h = toggle_zoom(h);
-      case 'x'
-         h = delete_current_marker(h);
       case 'm'
          h = toggle_mark(h);
    end
@@ -279,7 +277,7 @@ function btnMarkerList_Callback(~, ~, h) %#ok<DEFNU>
    for n = 1:h.cm
       m = h.markers(n);
       [seg, epo] = parsed_eeg_position(h, m.start_pos);
-      ts{n} = sprintf('S%d-E%d: %s', seg, epo, m.tag); %#ok<AGROW>
+      ts{n} = sprintf('S%02d-E%03d: %s (%s-%s)', seg, epo, m.tag, m.prev, m.next); %#ok<AGROW>
    end
    [item, ok] = listdlg( ...
       'ListString', ts, ...
@@ -712,13 +710,21 @@ end
 
 function h = finish_marker(h, absx, relx)
    if absx <= h.markers(h.cm).start_pos, beep; return; end
-   h.btnCancelMarker.Visible = 'off';
-   s = inputdlg('Assign tag to event or cancel', 'Tagging events', 1, {h.default_event_tag});
+   %! h.btnCancelMarker.Visible = 'off';
+   h.patches(h.cm).finish = draw_marker_finish(h, relx, h.cm, '?');
+   p = {
+      'Assign tag to event or cancel'
+      'Preceding state'
+      'Following state'
+      };
+   s = inputdlg(p, 'Tagging events', 1, {h.default_event_tag, 'Prev', 'Next'});
    if isempty(s) % never mind... ignore this marker
-      % delete([h.markers(h.cm).start_patch h.markers(h.cm).finish_patch]);
-      h.cm = h.cm-1;
+      delete([h.patches(h.cm).start h.patches(h.cm).finish]);
+      h = delete_marker(h);
    else % we do have a new marker
       h.markers(h.cm).finish_pos = absx;
+      h.markers(h.cm).prev = s{2};
+      h.markers(h.cm).next = s{3};
       h.markers(h.cm).tag = s{1};
       h.default_event_tag = s{1};
       h.patches(h.cm).finish = draw_marker_finish(h, relx, h.cm, s{1});
@@ -812,8 +818,9 @@ function rv = mrkstr
 end
 
 function modify_event(~, ~, ev, h)
-   choice = questdlg('Delete this marker?', ...
-      'Marker management', 'Yes', 'No', 'No');
+   m = h.markers(ev);
+   s = sprintf('Event: %s (%s <--> %s). Delete?', m.tag, m.prev, m.next);
+   choice = questdlg(s, 'Marker management', 'Yes', 'No', 'No');
    switch choice
       case 'Yes'
          h = delete_marker(h, ev);
