@@ -19,6 +19,7 @@ classdef HypnoAnal < handle
    %   ha.tot_epochs
    %   ha.tot_seconds
    %   ha.tot_minutes
+   %   ha.fractions
    %   ha.n_episodes
    %   ha.durations
    %   ha.mean_sec_durations
@@ -59,9 +60,14 @@ classdef HypnoAnal < handle
          rv = obj.tot_seconds / 60;
       end
       
+      function rv = fractions(obj)
+         tots = length(obj.hypno) * obj.epoch;
+         rv = obj.tot_seconds / tots;         
+      end
+      
       function rv = n_episodes(obj)
          for i=1:obj.n_stages
-            rv(i) = sum(obj.hypno==i & obj.changes ~= 0); %#ok<AGROW>
+            rv(i) = sum(obj.hypno==i & obj.changes); %#ok<AGROW>
          end
       end
       
