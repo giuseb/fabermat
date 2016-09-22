@@ -2,7 +2,8 @@
 clear
 clear classes %#ok<*CLCLS>
 load test_sleeper.mat
-sleeper(-eeg, emg)
+load test_hypnogram.mat
+sleeper(-eeg, emg, 'hypno', hypnogram)
 
 %% looking at power spectra over SWD episodes
 

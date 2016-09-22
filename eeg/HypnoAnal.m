@@ -10,7 +10,7 @@ classdef HypnoAnal < handle
    %   seconds (default is 10)
    %
    %   ha = HypnoAnal(hyp, 'Stages', {'REM', 'NREM', 'Wake'}) specifies the
-   %   stages (the ones shown here are the defaults); every "1" in the
+   %   states (the ones shown here are the defaults); every "1" in the
    %   hystogram vector is interpreted as 'REM', every "2" is 'NREM', and
    %   so on.
    %
@@ -26,13 +26,27 @@ classdef HypnoAnal < handle
    %   ha.std_sec_durations
    %
    %   All these functions return an array with as many elements as there
-   %   are stages, in the order specified as above.
+   %   are states, in the order specified as above.
+   %
+   %   ha.changes  returns state transitions at the epoch in which they
+   %   occur, in number form. The first element is always NaN. Assuming the
+   %   default state list {'REM', 'NREM', 'Wake'}, here are the possible
+   %   transition values:
+   %
+   %      0: no transition
+   %      1: REM  -> NREM     -1: NREM -> REM
+   %      2: NREM -> Wake     -2: Wake -> NREM
+   %      3: REM  -> Wake     -3: Wake -> REM
+   %
+   %   Unique transitions can be encoded for an arbitrary number of states.
+   %   For example:
+   % 
    
    %----------------------------------------------------------- Properties
    properties (SetAccess = private)
       hypno
       changes
-      stages
+      states
       epoch
    end
    %------------------------------------------------------- Public Methods
@@ -42,14 +56,22 @@ classdef HypnoAnal < handle
          p = inputParser;
          p.addRequired( 'hypnogram', @isnumvector)
          p.addParameter('Epoch', 10, @isnumscalar)
-         p.addParameter('Stages', {'REM', 'NREM', 'Wake'}, @iscellstr)
+         p.addParameter('States', {'REM', 'NREM', 'Wake'}, @iscellstr)
          p.parse(hypnogram, varargin{:})
 
          % assumes a vector
          obj.hypno  = p.Results.hypnogram(:); % enforce vertical!
-         obj.stages = p.Results.Stages;
+         obj.states = p.Results.Stages;
          obj.epoch  = p.Results.Epoch;
-         obj.changes = [1; diff(obj.hypno)];
+         obj.changes = [NaN; diff(2.^(obj.hypno-1))];
+      end
+      
+      function rv = istransition(obj, st1, st2)
+         rv = obj.hypno(1:end-1)==st1 & obj.hypno(2:end)==st2;
+      end
+      
+      function rv = tr_count(obj, st1, st2)
+         rv = sum(obj.istransition(st1, st2));
       end
       
       function rv = tot_seconds(obj)
@@ -66,27 +88,27 @@ classdef HypnoAnal < handle
       end
       
       function rv = n_episodes(obj)
-         for i=1:obj.n_stages
+         for i=1:obj.n_states
             rv(i) = sum(obj.hypno==i & obj.changes); %#ok<AGROW>
          end
       end
       
       function rv = mean_sec_durations(obj)
          d = obj.durations;
-         for i = 1:obj.n_stages
+         for i = 1:obj.n_states
             rv(i) = mean(d{i} * obj.epoch); %#ok<AGROW>         
          end
       end
       
       function rv = std_sec_durations(obj)
          d = obj.durations;
-         for i = 1:obj.n_stages
+         for i = 1:obj.n_states
             rv(i) = std(d{i} * obj.epoch); %#ok<AGROW>         
          end
       end
       
       function rv = durations(obj)
-         n = obj.n_stages;
+         n = obj.n_states;
          % set up the cell array to be returned
          rv = cell(1, n);
          % use the first epoch as a starting point
@@ -106,13 +128,13 @@ classdef HypnoAnal < handle
       end
       
       function rv = tot_epochs(obj)
-         for i=1:obj.n_stages
+         for i=1:obj.n_states
             rv(i) = sum(obj.hypno==i); %#ok<AGROW>
          end
       end
       
-      function rv = n_stages(obj)
-         rv = length(obj.stages);
+      function rv = n_states(obj)
+         rv = length(obj.states);
       end
    end
 end
