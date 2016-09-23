@@ -61,7 +61,7 @@ classdef HypnoAnal < handle
 
          % assumes a vector
          obj.hypno  = p.Results.hypnogram(:); % enforce vertical!
-         obj.states = p.Results.Stages;
+         obj.states = p.Results.States;
          obj.epoch  = p.Results.Epoch;
          obj.changes = [NaN; diff(2.^(obj.hypno-1))];
       end
@@ -72,6 +72,23 @@ classdef HypnoAnal < handle
       
       function rv = tr_count(obj, st1, st2)
          rv = sum(obj.istransition(st1, st2));
+      end
+      
+      function rv = tr_counts(obj)
+         i = 0;
+         for st1 = 1:length(obj.states)-1
+            for st2 = st1+1:length(obj.states)
+               i = i+1;
+               s1(i) = obj.states(st1);
+               s2(i) = obj.states(st2);
+               ct(i) = obj.tr_count(st1, st2);
+               i = i+1;
+               s1(i) = obj.states(st2);
+               s2(i) = obj.states(st1);
+               ct(i) = obj.tr_count(st2, st1);
+            end
+         end
+         rv = table(s1', s2', ct', 'variablenames', {'Before' 'After' 'Count'});
       end
       
       function rv = tot_seconds(obj)
